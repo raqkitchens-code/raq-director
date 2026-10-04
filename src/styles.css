@@ -990,3 +990,8 @@ details.more[open] > summary {
   color: var(--muted);
   font-size: 12px;
 }
+
+.warn-text {
+  color: var(--warn);
+  margin: 4px 0;
+}

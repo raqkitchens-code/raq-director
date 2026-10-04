@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.1 — 2026-10-04
+- Lens setup: a camera that fails to open is retried (Android releases the previous camera
+  a moment late), and the reason is shown with a retry button.
+- Opening a camera on the shot screen retries the same way.
+- Lens setup notes when a camera can zoom out below 1× by itself.
+
 ## 0.2.0 — 2026-10-04
 - Easier control: the director now tells you the one next correction (big arrow on screen,
   spoken Arabic when the phone has an Arabic voice, short beeps otherwise).
