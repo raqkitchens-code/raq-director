@@ -30,3 +30,40 @@ jobs:
           name: raq-director-apk
           path: raq-director-*.apk
           retention-days: 30
+
+  emulator:
+    needs: apk
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - uses: actions/download-artifact@v4
+        with: { name: raq-director-apk }
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Run the app on an emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -no-boot-anim -camera-back emulated -camera-front emulated
+          script: |
+            adb install -r raq-director-*.apk
+            adb shell pm grant com.raqkitchens.director android.permission.CAMERA
+            adb shell pm grant com.raqkitchens.director android.permission.RECORD_AUDIO
+            adb logcat -c
+            node scripts/android-e2e.mjs || (adb logcat -d -s RaqCamera:* AndroidRuntime:* Capacitor:* chromium:* CameraX:* | tail -200; exit 1)
+            adb logcat -d -s RaqCamera:* AndroidRuntime:* | tail -60
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: android-e2e
+          path: test-results/android
+          retention-days: 14
