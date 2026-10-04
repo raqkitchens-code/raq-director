@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { cameraErrorAr, capabilities, getStreamRetry, listCameras, readLensMap, rememberLens, type LensMap } from "../lib/camera"
+import { cameraErrorAr, capabilities, getStreamRetry, listCameras, markLensSetupDone, readLensMap, rememberLens, type LensMap } from "../lib/camera"
 import { arNum } from "../lib/labels"
 import type { Lens } from "../lib/types"
 
@@ -13,6 +13,7 @@ interface Cam {
   code?: string
   /** Lowest zoom the camera offers; below 1 means it can reach the wide view itself. */
   minZoom?: number
+  maxZoom?: number
 }
 
 const SLOTS: { lens: Lens; label: string }[] = [
@@ -24,9 +25,16 @@ const SLOTS: { lens: Lens; label: string }[] = [
 async function snapshot(deviceId: string): Promise<Omit<Cam, "deviceId" | "label">> {
   let stream: MediaStream | null = null
   try {
-    stream = await getStreamRetry({ video: { deviceId: { exact: deviceId } }, audio: false })
+    try {
+      stream = await getStreamRetry({ video: { deviceId: { exact: deviceId } }, audio: false })
+    } catch {
+      // Some lenses only open at a size they support; ask for a common one.
+      stream = await getStreamRetry({ video: { deviceId: { exact: deviceId }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false }, 2)
+    }
     const track = stream.getVideoTracks()[0]
-    const minZoom = capabilities(track).zoom?.min
+    const z = capabilities(track).zoom
+    const minZoom = z?.min
+    const maxZoom = z?.max
     const v = document.createElement("video")
     v.muted = true
     v.playsInline = true
@@ -38,7 +46,7 @@ async function snapshot(deviceId: string): Promise<Omit<Cam, "deviceId" | "label
     c.width = 240
     c.height = Math.round((240 * v.videoHeight) / (v.videoWidth || 1)) || 320
     c.getContext("2d")?.drawImage(v, 0, 0, c.width, c.height)
-    return { shot: c.toDataURL("image/jpeg", 0.7), minZoom }
+    return { shot: c.toDataURL("image/jpeg", 0.7), minZoom, maxZoom }
   } catch (e) {
     return { shot: null, error: cameraErrorAr(e), code: (e as DOMException)?.name ?? String(e) }
   } finally {
@@ -51,6 +59,7 @@ async function snapshot(deviceId: string): Promise<Omit<Cam, "deviceId" | "label
 /** Shows a picture from every back camera so the wide and zoom lenses can be picked by eye, once. */
 export function LensSetup({ onBack }: { onBack: () => void }) {
   const [cams, setCams] = useState<Cam[]>([])
+  const [total, setTotal] = useState<number | null>(null)
   const [map, setMap] = useState<LensMap>(readLensMap)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -63,7 +72,9 @@ export function LensSetup({ onBack }: { onBack: () => void }) {
         const s = await getStreamRetry({ video: { facingMode: "environment" }, audio: false })
         s.getTracks().forEach((t) => t.stop())
         await new Promise((r) => setTimeout(r, 500))
-        const back = (await listCameras()).filter((c) => c.back)
+        const all = await listCameras()
+        setTotal(all.length)
+        const back = all.filter((c) => c.back)
         const out: Cam[] = []
         for (const c of back) {
           if (cancelled) return
@@ -111,6 +122,10 @@ export function LensSetup({ onBack }: { onBack: () => void }) {
             {c.shot ? <img src={c.shot} alt="" /> : <div className="ph">مفيش صورة</div>}
             <div className="grow">
               <b>كاميرا {arNum(i + 1)}</b>
+              <p className="muted small" dir="ltr">
+                {c.label}
+                {c.minZoom !== undefined && ` · zoom ${c.minZoom}–${c.maxZoom}`}
+              </p>
               {c.minZoom !== undefined && c.minZoom < 1 && (
                 <p className="muted small">الكاميرا دي بتوصل للواسعة لوحدها بالتصغير.</p>
               )}
@@ -140,10 +155,21 @@ export function LensSetup({ onBack }: { onBack: () => void }) {
           </li>
         ))}
       </ul>
+      {total !== null && (
+        <p className="muted small">
+          المتصفح شايف {arNum(total)} كاميرا، منهم {arNum(cams.length)} خلفية.
+        </p>
+      )}
       {!loading && cams.length <= 1 && (
         <p className="card">المتصفح مش شايف غير كاميرا خلفية واحدة، فالأداة هتستخدم التقريب الرقمي بدل تغيير العدسة.</p>
       )}
-      <button className="btn primary wide" onClick={onBack}>
+      <button
+        className="btn primary wide"
+        onClick={() => {
+          markLensSetupDone()
+          onBack()
+        }}
+      >
         تمام
       </button>
     </div>
