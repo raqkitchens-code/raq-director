@@ -3,7 +3,19 @@
  * phone has an Arabic voice. Everything runs on the phone; nothing is sent out.
  */
 
+import { RaqCamera, isNative } from "./native"
+
 let ctx: AudioContext | null = null
+/** In the Android app the phone's own text-to-speech speaks; this says if it has Arabic. */
+let nativeArabic = false
+
+function refreshNativeVoice() {
+  if (!isNative()) return
+  RaqCamera.voice()
+    .then((v) => (nativeArabic = v.arabic))
+    .catch(() => {})
+}
+refreshNativeVoice()
 
 function audio(): AudioContext | null {
   try {
@@ -18,6 +30,7 @@ function audio(): AudioContext | null {
 /** Must be called from a tap once, so the browser allows sound later. */
 export function unlockAudio() {
   audio()
+  refreshNativeVoice()
   try {
     speechSynthesis.getVoices()
   } catch {
@@ -46,6 +59,10 @@ export const beepCount = () => tone(660, 90)
 export const beepGo = () => tone(990, 220)
 
 export function vibrate(pattern: number | number[]) {
+  if (isNative()) {
+    RaqCamera.vibrate({ pattern: Array.isArray(pattern) ? pattern : [pattern] }).catch(() => {})
+    return
+  }
   try {
     navigator.vibrate?.(pattern)
   } catch {
@@ -66,9 +83,14 @@ function arabicVoice(): SpeechSynthesisVoice | null {
   return voice
 }
 
-export const hasArabicVoice = () => arabicVoice() !== null
+export const hasArabicVoice = () => (isNative() ? nativeArabic : arabicVoice() !== null)
 
 export function speak(text: string) {
+  if (isNative()) {
+    if (!nativeArabic) return false
+    RaqCamera.speak({ text }).catch(() => {})
+    return true
+  }
   const v = arabicVoice()
   if (!v) return false
   try {
@@ -85,6 +107,10 @@ export function speak(text: string) {
 }
 
 export function stopSpeaking() {
+  if (isNative()) {
+    RaqCamera.stopSpeaking().catch(() => {})
+    return
+  }
   try {
     speechSynthesis.cancel()
   } catch {

@@ -5,6 +5,7 @@ import "./styles.css"
 import { StrictMode } from "react"
 import { createRoot } from "react-dom/client"
 import { App } from "./App"
+import { isNative } from "./lib/native"
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
@@ -13,7 +14,8 @@ createRoot(document.getElementById("root")!).render(
 )
 
 // Offline app shell, so the director works on site without internet.
-if ("serviceWorker" in navigator && import.meta.env.PROD) {
+// The Android app ships its files inside, so it needs no offline cache (and a cache would hide updates).
+if ("serviceWorker" in navigator && import.meta.env.PROD && !isNative()) {
   window.addEventListener("load", () => {
     navigator.serviceWorker.register("/sw.js").catch(() => {})
   })

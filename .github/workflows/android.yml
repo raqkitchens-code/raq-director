@@ -13,7 +13,7 @@ jobs:
         with: { node-version: 22, cache: npm }
       - uses: actions/setup-java@v4
         with: { distribution: temurin, java-version: 21 }
-      - uses: android-actions/setup-android@v3
+      # The runner already has the Android SDK (ANDROID_HOME); Gradle fetches missing parts.
       - run: npm ci
       - run: npm run build
       - run: npx cap sync android

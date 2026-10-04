@@ -2,6 +2,7 @@ import { useEffect, useState } from "react"
 import { db, storageUsage } from "../lib/db"
 import { exportTake, takeFileName } from "../lib/files"
 import { arNum } from "../lib/labels"
+import { RaqCamera, isNative } from "../lib/native"
 import type { ShootPack, Take } from "../lib/types"
 
 interface Props {
@@ -35,6 +36,10 @@ export function Takes({ packs, takes, onBack, onDeleted }: Props) {
   const shotTitle = (t: Take) => packOf(t)?.shots.find((s) => s.id === t.shot_id)?.title ?? t.shot_id
 
   const doExport = async (t: Take) => {
+    if (t.gallery_uri) {
+      RaqCamera.share({ uri: t.gallery_uri }).catch(() => setMsg("مش عارف أفتح قايمة المشاركة"))
+      return
+    }
     const p = packOf(t)
     const blob = await db.blob(t.id)
     if (!blob || !p) return setMsg("الملف مش موجود")
@@ -45,13 +50,19 @@ export function Takes({ packs, takes, onBack, onDeleted }: Props) {
   }
 
   const play = async (t: Take) => {
+    if (t.gallery_uri) {
+      RaqCamera.openInGallery({ uri: t.gallery_uri }).catch(() => setMsg("اللقطة مش موجودة في الجاليري"))
+      return
+    }
     const blob = await db.blob(t.id)
     if (!blob) return
     setPlaying({ id: t.id, url: URL.createObjectURL(blob) })
   }
 
   const remove = async (t: Take) => {
-    if (!window.confirm("تمسح اللقطة دي من الموبايل؟ لو مش متصدّرة هتضيع.")) return
+    const q = t.gallery_uri ? "تمسح اللقطة دي من الأداة ومن الجاليري؟" : "تمسح اللقطة دي من الموبايل؟ لو مش متصدّرة هتضيع."
+    if (!window.confirm(q)) return
+    if (t.gallery_uri) await RaqCamera.deleteTake({ galleryUri: t.gallery_uri }).catch(() => {})
     await db.deleteTake(t.id)
     onDeleted(t.id)
   }
@@ -71,10 +82,16 @@ export function Takes({ packs, takes, onBack, onDeleted }: Props) {
           )}
         </div>
       </header>
+      {isNative() ? (
+        <p className="muted small">
+          كل لقطة بتتحفظ في الجاليري على طول، في فولدر راق. «شارك» بتفتح قايمة المشاركة: دروب بوكس أو واتساب.
+        </p>
+      ) : (
       <p className="muted small">
         اللقطات محفوظة على الموبايل ده بس. «صدّر» بتفتح قايمة المشاركة: احفظها في المعرض، أو ارفعها على دروب بوكس في فولدر التسويق
         أو فولدر المشروع.
       </p>
+      )}
       {msg && <div className="banner">{msg}</div>}
       {kept.length === 0 && <p className="card">لسه مفيش لقطات.</p>}
       <ul className="takes">
@@ -97,7 +114,7 @@ export function Takes({ packs, takes, onBack, onDeleted }: Props) {
               </span>
               <div className="row">
                 <button className="btn small" disabled={busy === t.id} onClick={() => doExport(t)}>
-                  صدّر
+                  {t.gallery_uri ? "شارك" : "صدّر"}
                 </button>
                 <button className="btn small danger subtle" onClick={() => remove(t)}>
                   امسح

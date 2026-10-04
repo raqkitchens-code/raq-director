@@ -37,8 +37,10 @@ import {
   startMotion,
   type MotionSample,
 } from "../lib/motion"
+import { RaqCamera, decodeLuma, fileUrl, isNative, rectOf, type CamState } from "../lib/native"
+import { takeFileName } from "../lib/files"
 import { consentBlocked } from "../lib/pack"
-import type { CheckResult, ShootPack, Take } from "../lib/types"
+import type { CheckResult, Lens, ShootPack, Take } from "../lib/types"
 
 interface Props {
   pack: ShootPack
@@ -54,7 +56,10 @@ interface Props {
 type Phase = "framing" | "countdown" | "recording" | "review"
 
 interface Review {
-  blob: Blob
+  /** Web: the recorded video. In the app the file is on the phone instead (native). */
+  blob?: Blob
+  native?: { path: string; galleryUri?: string }
+  size: number
   url: string
   duration: number
   checks: CheckResult[]
@@ -78,6 +83,9 @@ export function Director({ pack, shotIndex, takes, onSaved, onPackChange, onGo, 
   const videoRef = useRef<HTMLVideoElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
   const recRef = useRef<MediaRecorder | null>(null)
+  const recording = useRef(false)
+  const native = useMemo(isNative, [])
+  const viewportRef = useRef<HTMLDivElement>(null)
   const chunks = useRef<Blob[]>([])
   const startedAt = useRef(0)
   const samples = useRef<{ motion: MotionSample[]; frames: FrameStats[]; matches: number[] }>({
@@ -93,6 +101,7 @@ export function Director({ pack, shotIndex, takes, onSaved, onPackChange, onGo, 
 
   const [phase, setPhase] = useState<Phase>("framing")
   const [error, setError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
   const [devices, setDevices] = useState<CameraDevice[]>([])
   const [deviceId, setDeviceId] = useState<string | undefined>(() =>
     shot.lens === "front" ? undefined : readLensMap()[shot.lens],
@@ -100,6 +109,11 @@ export function Director({ pack, shotIndex, takes, onSaved, onPackChange, onGo, 
   // The person can flip to the front camera on any shot (stories, talking to camera).
   const [facing, setFacing] = useState<"back" | "front">(shot.lens === "front" ? "front" : "back")
   const useFront = facing === "front"
+  const firstLens: Lens = shot.lens === "front" ? "1" : shot.lens
+  // App only: the lens shown to the person, and the one the camera was opened for.
+  const [activeLens, setActiveLens] = useState<Lens>(firstLens)
+  const [bindLens, setBindLens] = useState<Lens>(firstLens)
+  const [cam, setCam] = useState<CamState | null>(null)
   const [zoomCaps, setZoomCaps] = useState<{ min: number; max: number; step: number } | null>(null)
   const [zoom, setZoom] = useState(1)
   const [torch, setTorchOn] = useState(false)
@@ -127,8 +141,9 @@ export function Director({ pack, shotIndex, takes, onSaved, onPackChange, onGo, 
   const blocked = consentBlocked(pack, shot)
   const shotTakes = takes.filter((t) => t.pack_id === pack.id && t.shot_id === shot.id)
 
-  // Camera
+  // Camera (browser)
   useEffect(() => {
+    if (native) return
     let cancelled = false
     setError(null)
     openCamera({ lens: useFront ? "front" : shot.lens, deviceId: useFront ? undefined : deviceId, audio: true })
@@ -162,7 +177,72 @@ export function Director({ pack, shotIndex, takes, onSaved, onPackChange, onGo, 
     return () => {
       cancelled = true
     }
-  }, [shot.lens, deviceId, useFront])
+  }, [native, shot.lens, deviceId, useFront])
+
+  // Camera (Android app): the phone's own camera drawn behind the page, in the viewport's place.
+  useEffect(() => {
+    if (!native) return
+    const el = viewportRef.current
+    if (!el) return
+    let cancelled = false
+    setError(null)
+    RaqCamera.start({ facing, lens: bindLens, rect: rectOf(el) })
+      .then((st) => {
+        if (cancelled) return
+        setCam(st)
+        setZoom(st.zoom ?? 1)
+        setZoomCaps(st.zoomMin !== undefined ? { min: st.zoomMin, max: st.zoomMax ?? st.zoomMin, step: 0.1 } : null)
+      })
+      .catch((e: { code?: string }) => {
+        setError(
+          e?.code === "NotAllowedError"
+            ? "الكاميرا مقفولة. افتح إعدادات التطبيق واسمح بالكاميرا والميكروفون."
+            : "الكاميرا مش بتفتح. اقفل أي تطبيق كاميرا تاني وجرّب تاني.",
+        )
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [native, facing, bindLens])
+
+  useEffect(() => {
+    if (!native) return
+    const root = document.documentElement
+    root.classList.add("cam-through")
+    return () => {
+      root.classList.remove("cam-through")
+      RaqCamera.stop().catch(() => {})
+    }
+  }, [native])
+
+  // Keep the native picture exactly under the viewport, hide it while reviewing.
+  useEffect(() => {
+    if (!native) return
+    const el = viewportRef.current
+    if (!el) return
+    const place = () => {
+      RaqCamera.setPreview({ visible: phase !== "review", rect: rectOf(el) }).catch(() => {})
+    }
+    place()
+    const ro = new ResizeObserver(place)
+    ro.observe(el)
+    window.addEventListener("scroll", place, { passive: true })
+    return () => {
+      ro.disconnect()
+      window.removeEventListener("scroll", place)
+    }
+  }, [native, phase])
+
+  const selectLens = (l: Lens) => {
+    setActiveLens(l)
+    const ratio = LENS_ZOOM[l]
+    const zoomable = cam && cam.mode === "zoom" && cam.zoomMin !== undefined && ratio >= cam.zoomMin - 0.05
+    if (zoomable) {
+      RaqCamera.setZoom({ ratio })
+        .then((r) => setZoom(r.zoom))
+        .catch(() => {})
+    } else setBindLens(l)
+  }
 
   useEffect(
     () => () => {
@@ -192,7 +272,7 @@ export function Director({ pack, shotIndex, takes, onSaved, onPackChange, onGo, 
       setMotionOk(ok)
       stop = startMotion((s) => {
         att.current = s
-        if (recRef.current?.state === "recording") samples.current.motion.push(s)
+        if (recording.current) samples.current.motion.push(s)
       })
       const tick = (t: number) => {
         if (t - last > 100 && att.current) {
@@ -228,8 +308,23 @@ export function Director({ pack, shotIndex, takes, onSaved, onPackChange, onGo, 
     img.src = shot.reference_image
   }, [shot.reference_image])
 
-  // Frame analysis, 4 times a second
+  const analyzeLuma = useCallback((l: Float32Array) => {
+    const f = frameStats(l, ANALYSIS_W, ANALYSIS_H)
+    setStats(f)
+    let m: number | null = null
+    if (refEdges.current) {
+      m = ncc(edgeMap(l, ANALYSIS_W, ANALYSIS_H), refEdges.current)
+      setMatch(m)
+    }
+    if (recording.current) {
+      samples.current.frames.push(f)
+      if (m !== null) samples.current.matches.push(m)
+    }
+  }, [])
+
+  // Frame analysis (browser), 4 times a second
   useEffect(() => {
+    if (native) return
     const c = document.createElement("canvas")
     c.width = ANALYSIS_W
     c.height = ANALYSIS_H
@@ -238,29 +333,93 @@ export function Director({ pack, shotIndex, takes, onSaved, onPackChange, onGo, 
       const v = videoRef.current
       if (!ctx || !v || v.readyState < 2 || !v.videoWidth) return
       drawCover(ctx, v, v.videoWidth, v.videoHeight, ANALYSIS_W, ANALYSIS_H)
-      const l = lumaFromRGBA(ctx.getImageData(0, 0, ANALYSIS_W, ANALYSIS_H).data, ANALYSIS_W, ANALYSIS_H)
-      const f = frameStats(l, ANALYSIS_W, ANALYSIS_H)
-      setStats(f)
-      let m: number | null = null
-      if (refEdges.current) {
-        m = ncc(edgeMap(l, ANALYSIS_W, ANALYSIS_H), refEdges.current)
-        setMatch(m)
-      }
-      if (recRef.current?.state === "recording") {
-        samples.current.frames.push(f)
-        if (m !== null) samples.current.matches.push(m)
-      }
+      analyzeLuma(lumaFromRGBA(ctx.getImageData(0, 0, ANALYSIS_W, ANALYSIS_H).data, ANALYSIS_W, ANALYSIS_H))
     }, 250)
     return () => window.clearInterval(id)
-  }, [])
+  }, [native, analyzeLuma])
+
+  // Frame analysis (app): the camera sends a small grayscale picture a few times a second.
+  useEffect(() => {
+    if (!native) return
+    let handle: { remove: () => Promise<void> } | null = null
+    let gone = false
+    RaqCamera.addListener("frame", (f) => {
+      if (f.w === ANALYSIS_W && f.h === ANALYSIS_H) analyzeLuma(decodeLuma(f.luma))
+    }).then((h) => {
+      if (gone) h.remove()
+      else handle = h
+    })
+    return () => {
+      gone = true
+      handle?.remove()
+    }
+  }, [native, analyzeLuma])
 
   const ready = useMemo(() => readiness(shot, attitude, stats, match), [shot, attitude, stats, match])
 
   const stopRecording = useCallback(() => {
-    if (recRef.current?.state === "recording") recRef.current.stop()
-  }, [])
+    if (!native) {
+      if (recRef.current?.state === "recording") recRef.current.stop()
+      return
+    }
+    if (!recording.current) return
+    recording.current = false
+    const wall = (performance.now() - startedAt.current) / 1000
+    const snap = RaqCamera.snapshot({ width: 270 }).catch(() => ({ dataUrl: "" }))
+    RaqCamera.stopRecording()
+      .then(async (r) => {
+        const duration = r.durationMs > 0 ? r.durationMs / 1000 : wall
+        const { checks, verdict } = evaluateTake(shot, { duration, ...samples.current })
+        const poster = (await snap).dataUrl
+        setNotice(r.galleryUri ? null : "اللقطة اتسجلت بس ماتحفظتش في الجاليري. فيه مساحة على الموبايل؟")
+        setReview({
+          url: fileUrl(r.path),
+          native: { path: r.path, galleryUri: r.galleryUri },
+          size: r.size,
+          duration,
+          checks,
+          verdict,
+          poster,
+          mime: "video/mp4",
+        })
+        setPhase("review")
+      })
+      .catch(() => {
+        setError("التسجيل وقف بغلط. جرّب تاني.")
+        setPhase("framing")
+      })
+  }, [native, shot])
 
   const startRecording = useCallback(() => {
+    if (native) {
+      samples.current = { motion: [], frames: [], matches: [] }
+      const draft: Take = {
+        id: "",
+        pack_id: pack.id,
+        shot_id: shot.id,
+        n: shotTakes.length + 1,
+        created_at: new Date().toISOString(),
+        duration_s: 0,
+        mime: "video/mp4",
+        size: 0,
+        checks: [],
+        verdict: "retake",
+        kept: false,
+      }
+      const name = takeFileName(pack, draft).replace(/\.mp4$/, "") + "-" + Date.now().toString(36)
+      RaqCamera.startRecording({ name })
+        .then(() => {
+          recording.current = true
+          startedAt.current = performance.now()
+          setElapsed(0)
+          setPhase("recording")
+        })
+        .catch(() => {
+          setError("التسجيل مابدأش. جرّب تاني.")
+          setPhase("framing")
+        })
+      return
+    }
     const stream = streamRef.current
     if (!stream) return
     const mime = pickMime()
@@ -276,6 +435,7 @@ export function Director({ pack, shotIndex, takes, onSaved, onPackChange, onGo, 
     samples.current = { motion: [], frames: [], matches: [] }
     rec.ondataavailable = (e) => e.data.size && chunks.current.push(e.data)
     rec.onstop = () => {
+      recording.current = false
       const duration = (performance.now() - startedAt.current) / 1000
       const type = rec.mimeType || mime || "video/webm"
       const blob = new Blob(chunks.current, { type })
@@ -292,15 +452,16 @@ export function Director({ pack, shotIndex, takes, onSaved, onPackChange, onGo, 
           poster = c.toDataURL("image/jpeg", 0.7)
         }
       }
-      setReview({ blob, url: URL.createObjectURL(blob), duration, checks, verdict, poster, mime: type })
+      setReview({ blob, size: blob.size, url: URL.createObjectURL(blob), duration, checks, verdict, poster, mime: type })
       setPhase("review")
     }
     recRef.current = rec
     rec.start(1000)
+    recording.current = true
     startedAt.current = performance.now()
     setElapsed(0)
     setPhase("recording")
-  }, [shot])
+  }, [native, pack, shot, shotTakes.length])
 
   // Countdown then record
   useEffect(() => {
@@ -396,12 +557,13 @@ export function Director({ pack, shotIndex, takes, onSaved, onPackChange, onGo, 
 
   const onTapVideo = (e: React.MouseEvent<HTMLDivElement>) => {
     const track = streamRef.current?.getVideoTracks()[0]
-    if (!track || phase === "review") return
+    if ((!track && !native) || phase === "review") return
     const r = e.currentTarget.getBoundingClientRect()
     const x = (e.clientX - r.left) / r.width
     const y = (e.clientY - r.top) / r.height
     setFocusPt({ x, y })
-    focusAt(track, x, y)
+    if (native) RaqCamera.focus({ x, y }).catch(() => {})
+    else if (track) focusAt(track, x, y)
     window.setTimeout(() => setFocusPt(null), 1200)
   }
 
@@ -416,14 +578,16 @@ export function Director({ pack, shotIndex, takes, onSaved, onPackChange, onGo, 
         created_at: new Date().toISOString(),
         duration_s: Math.round(review.duration * 10) / 10,
         mime: review.mime,
-        size: review.blob.size,
+        size: review.size,
         checks: review.checks,
         verdict: review.verdict,
         kept: true,
         poster: review.poster,
+        gallery_uri: review.native?.galleryUri,
       }
       try {
-        await db.addTake(take, review.blob)
+        if (review.blob) await db.addTake(take, review.blob)
+        else await db.saveTake(take)
         onSaved(take)
       } catch {
         setError("مفيش مساحة كفاية على الموبايل لحفظ اللقطة. صدّر اللقطات القديمة وامسحها.")
@@ -435,7 +599,10 @@ export function Director({ pack, shotIndex, takes, onSaved, onPackChange, onGo, 
       }
     }
     const accepted = keep && review.verdict === "accepted"
-    URL.revokeObjectURL(review.url)
+    if (review.native) {
+      // The gallery copy is the take. The working copy goes; a dropped take leaves the gallery too.
+      RaqCamera.deleteTake({ path: review.native.path, galleryUri: keep ? undefined : review.native.galleryUri }).catch(() => {})
+    } else URL.revokeObjectURL(review.url)
     setReview(null)
     setPhase("framing")
     if (accepted && prefs.autoNext) {
@@ -456,11 +623,23 @@ export function Director({ pack, shotIndex, takes, onSaved, onPackChange, onGo, 
   }
 
   const toggleTorch = async () => {
+    if (native) {
+      RaqCamera.setTorch({ on: !torch })
+        .then(() => setTorchOn(!torch))
+        .catch(() => {})
+      return
+    }
     const track = streamRef.current?.getVideoTracks()[0]
     if (track && (await setTorch(track, !torch))) setTorchOn(!torch)
   }
 
   const onZoom = async (z: number) => {
+    if (native) {
+      RaqCamera.setZoom({ ratio: z })
+        .then((r) => setZoom(r.zoom))
+        .catch(() => {})
+      return
+    }
     const track = streamRef.current?.getVideoTracks()[0]
     if (!track) return
     const v = await applyZoom(track, z)
@@ -483,16 +662,25 @@ export function Director({ pack, shotIndex, takes, onSaved, onPackChange, onGo, 
   if (ready.match === false) hints.push("قرّب الكادر من صورة المرجع")
 
   const lensMissing =
+    !native &&
     !useFront && shot.lens !== "front" && shot.lens !== "1" && !readLensMap()[shot.lens] && devices.length > 1 && !lensSetupDone()
   // Browsers on most phones only give the main back lens, which cannot zoom out below 1x.
-  const noWide = !useFront && shot.lens === "0.6" && !deviceId && zoomCaps !== null && zoomCaps.min >= 1
+  const noWide = native
+    ? !useFront && activeLens === "0.6" && cam?.mode === "none"
+    : !useFront && shot.lens === "0.6" && !deviceId && zoomCaps !== null && zoomCaps.min >= 1
+  const lensNow: Lens = useFront ? "front" : native ? activeLens : shot.lens
+  const LENS_PILLS: Lens[] = ["0.6", "1", "2", "3"]
 
   const pitchPos = (p: number) => 50 - Math.max(-45, Math.min(45, p)) * (50 / 45)
 
   return (
     <div className="director">
-      <div className={`viewport ${phase === "review" ? "reviewing" : ready.ready ? "is-ready" : "is-off"}`} onClick={onTapVideo}>
-        <video ref={videoRef} playsInline muted autoPlay className={useFront ? "mirror" : ""} />
+      <div
+        ref={viewportRef}
+        className={`viewport ${phase === "review" ? "reviewing" : ready.ready ? "is-ready" : "is-off"}`}
+        onClick={onTapVideo}
+      >
+        {!native && <video ref={videoRef} playsInline muted autoPlay className={useFront ? "mirror" : ""} />}
 
         {shot.reference_image && phase !== "review" && (
           <img className="ghost" src={shot.reference_image} style={{ opacity: ghost }} alt="" />
@@ -563,6 +751,15 @@ export function Director({ pack, shotIndex, takes, onSaved, onPackChange, onGo, 
           </div>
         </div>
 
+        {native && !useFront && phase === "framing" && (
+          <div className="lens-pills" onClick={(e) => e.stopPropagation()}>
+            {LENS_PILLS.map((l) => (
+              <button key={l} className={`pill ${activeLens === l ? "on" : ""}`} onClick={() => selectLens(l)}>
+                {l === "0.6" ? "٫٦" : arNum(l)}
+              </button>
+            ))}
+          </div>
+        )}
         {phase !== "review" && (
           <div className="record-row" onClick={(e) => e.stopPropagation()}>
             <button
@@ -594,6 +791,8 @@ export function Director({ pack, shotIndex, takes, onSaved, onPackChange, onGo, 
           <div className={`verdict ${review.verdict === "accepted" ? "ok" : "warn"}`}>
             {review.verdict === "accepted" ? "اللقطة مقبولة" : "اللقطة محتاجة تتعاد"}
           </div>
+          {notice && <div className="banner warn">{notice}</div>}
+          {review.native?.galleryUri && <p className="muted small">اتحفظت في الجاليري، في فولدر راق.</p>}
           <video src={review.url} controls playsInline className="review-video" />
           <ul className="checks">
             {review.checks.map((c) => (
@@ -639,6 +838,7 @@ export function Director({ pack, shotIndex, takes, onSaved, onPackChange, onGo, 
             </div>
           )}
           {error && <div className="banner warn">{error}</div>}
+          {notice && <div className="banner warn">{notice}</div>}
           {lensMissing && (
             <button className="banner warn as-btn" onClick={onLensSetup}>
               {LENS_AR[shot.lens]} لسه مش متظبطة. دوس هنا واختارها مرة واحدة.
@@ -647,14 +847,16 @@ export function Director({ pack, shotIndex, takes, onSaved, onPackChange, onGo, 
 
           {noWide && (
             <div className="banner">
-              العدسة الواسعة مش متاحة من المتصفح. صوّر بالعادية وارجع لورا خطوتين عشان المكان كله يدخل.
+              {native
+                ? "الموبايل مش مدّي التطبيق العدسة الواسعة. صوّر بالعادية وارجع لورا خطوتين، وابعتلي صورة من صفحة ظبط العدسات."
+                : "العدسة الواسعة مش متاحة من المتصفح. صوّر بالعادية وارجع لورا خطوتين عشان المكان كله يدخل."}
             </div>
           )}
 
           <div className="essentials">
             <div className="ess">
               <span className="muted small">العدسة</span>
-              <b>{useFront ? LENS_SHORT.front : noWide ? "١× وارجع لورا" : LENS_SHORT[shot.lens]}</b>
+              <b>{noWide ? "١× وارجع لورا" : LENS_SHORT[lensNow]}</b>
             </div>
             <div className="ess">
               <span className="muted small">الارتفاع</span>

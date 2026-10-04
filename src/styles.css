@@ -995,3 +995,43 @@ details.more[open] > summary {
   color: var(--warn);
   margin: 4px 0;
 }
+
+/* ---------- Android app (0.3) ---------- */
+/* The phone's own camera is drawn behind the page; let it show through the viewport. */
+html.cam-through,
+html.cam-through body,
+html.cam-through #root,
+html.cam-through .director,
+html.cam-through .viewport {
+  background: transparent;
+}
+
+.lens-pills {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 4px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.pill {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 0;
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--text);
+  font: inherit;
+  font-size: 15px;
+}
+
+.pill.on {
+  background: var(--white);
+  color: var(--c900);
+  font-weight: 700;
+}
