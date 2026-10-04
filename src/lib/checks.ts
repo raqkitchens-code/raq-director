@@ -112,3 +112,27 @@ export function evaluateTake(shot: Shot, r: Recording): { checks: CheckResult[];
 
   return { checks, verdict: checks.every((c) => c.ok) ? "accepted" : "retake" }
 }
+
+export type Arrow = "up" | "down" | "turn_left" | "turn_right" | "light" | "focus" | "match"
+
+export interface Guide {
+  arrow: Arrow | null
+  /** Short spoken/shown instruction. */
+  say: string
+}
+
+/** The single most important correction right now, in the order a camera operator would fix it. */
+export function nextCorrection(shot: Shot, a: Attitude | null, r: Readiness, f: FrameStats | null): Guide {
+  if (r.ready) return { arrow: null, say: "تمام، صوّر" }
+  if (a && r.level === false)
+    return a.roll > 0
+      ? { arrow: "turn_left", say: "ميّل راس الموبايل ناحية الشمال" }
+      : { arrow: "turn_right", say: "ميّل راس الموبايل ناحية اليمين" }
+  if (a && r.pitch === false)
+    return a.pitch > shot.pitch_deg ? { arrow: "down", say: "وطّي الكاميرا شوية" } : { arrow: "up", say: "ارفع الكاميرا شوية" }
+  if (r.light === false)
+    return { arrow: "light", say: f && f.mean < LIMITS.meanMin ? "المكان ضلمة، زوّد النور" : "النور جامد، غيّر مكانك" }
+  if (r.sharp === false) return { arrow: "focus", say: "دوس على الحاجة المهمة عشان تبقى واضحة" }
+  if (r.match === false) return { arrow: "match", say: "قرّب الكادر من صورة المرجع" }
+  return { arrow: null, say: "" }
+}

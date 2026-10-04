@@ -63,3 +63,17 @@ export function pitchAr(deg: number): string {
   if (Math.abs(deg) < 1) return "مستقيم (موازي للأرض)"
   return deg < 0 ? `باصص لتحت ${arNum(Math.abs(deg))} درجة` : `باصص لفوق ${arNum(deg)} درجة`
 }
+
+/** One-glance versions for the camera screen. */
+export const LENS_SHORT: Record<Lens, string> = { "0.6": "٠٫٦ واسعة", "1": "١× عادية", "2": "٢× تقريب", "3": "٣× تقريب", front: "أمامية" }
+
+export const MOVE_SHORT: Record<Move, string> = {
+  static: "ثابت",
+  pan_left: "لف شمال",
+  pan_right: "لف يمين",
+  tilt_up: "ارفع",
+  tilt_down: "نزّل",
+  push_in: "قرّب",
+  pull_out: "ابعد",
+  slide: "بالجنب",
+}

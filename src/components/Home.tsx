@@ -11,10 +11,11 @@ interface Props {
   onNew: () => void
   onImport: () => void
   onTakes: () => void
+  onLensSetup: () => void
   onLock: () => void
 }
 
-export function Home({ packs, takes, onOpenPack, onShoot, onNew, onImport, onTakes, onLock }: Props) {
+export function Home({ packs, takes, onOpenPack, onShoot, onNew, onImport, onTakes, onLensSetup, onLock }: Props) {
   const imported = packs.filter((p) => p.id !== LIBRARY_PACK.id).sort((a, b) => b.created_at.localeCompare(a.created_at))
   const active = imported.find((p) => {
     const pr = packProgress(takes, p)
@@ -80,6 +81,10 @@ export function Home({ packs, takes, onOpenPack, onShoot, onNew, onImport, onTak
         <button className="tile" onClick={onTakes}>
           <b>اللقطات المحفوظة</b>
           <span className="muted">{arNum(takes.filter((t) => t.kept).length)} لقطة على الموبايل</span>
+        </button>
+        <button className="tile" onClick={onLensSetup}>
+          <b>ظبط العدسات</b>
+          <span className="muted">مرة واحدة: عرّف المخرج الواسعة والتقريب بالصور</span>
         </button>
       </div>
 
