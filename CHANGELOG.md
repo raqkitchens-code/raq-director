@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.0 — 2026-10-04
+- Android app (Capacitor) around the same screens, built by CI as an installable APK.
+- Native camera (CameraX): reaches the ultra-wide through zoom below 1× on the main camera,
+  or a separate / physical wide camera when the phone exposes it; 1×, 2×, 3× and front.
+- Lens rail on the camera screen (٫٦ ١ ٢ ٣) and a lens report page with each camera's view angle.
+- Every take is saved straight into the gallery (Movies/RAQ); a dropped take is removed from it.
+- Spoken Arabic through the phone's own text-to-speech, vibration through the app.
+- Framing checks fed by a small grayscale frame from the native camera.
+- CI runs the app on an emulator: unlock, open a shot, record, check the gallery.
+
 ## 0.2.2 — 2026-10-04
 - Flip button on the shot screen: switch any shot to the front camera (stories, talking to camera).
 - Wide shots on a phone whose browser gives no wide lens: a note to shoot at 1× and step back.

@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">مخرج راق</string>
+    <string name="title_activity_main">مخرج راق</string>
+    <string name="package_name">com.raqkitchens.director</string>
+    <string name="custom_url_scheme">com.raqkitchens.director</string>
+</resources>

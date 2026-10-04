@@ -3,6 +3,7 @@ import { Director } from "./components/Director"
 import { Home } from "./components/Home"
 import { Import } from "./components/Import"
 import { LensSetup } from "./components/LensSetup"
+import { NativeLenses } from "./components/NativeLenses"
 import { Lock } from "./components/Lock"
 import { NewRequest } from "./components/NewRequest"
 import { PackView } from "./components/PackView"
@@ -11,6 +12,7 @@ import { db, persistStorage } from "./lib/db"
 import { LIBRARY_PACK } from "./lib/library"
 import { unlockAudio } from "./lib/feedback"
 import { RELOCK_MS } from "./lib/lock"
+import { isNative } from "./lib/native"
 import type { ShootPack, Take } from "./lib/types"
 
 type View =
@@ -118,7 +120,7 @@ export function App() {
     case "takes":
       return <Takes packs={packs} takes={takes} onBack={home} onDeleted={(id) => setTakes((ts) => ts.filter((t) => t.id !== id))} />
     case "lens":
-      return <LensSetup onBack={() => setView(view.back)} />
+      return isNative() ? <NativeLenses onBack={() => setView(view.back)} /> : <LensSetup onBack={() => setView(view.back)} />
     default:
       return (
         <Home

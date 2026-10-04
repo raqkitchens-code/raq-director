@@ -88,6 +88,8 @@ export interface Take {
   verdict: "accepted" | "retake"
   /** Person's choice after review. */
   kept: boolean
+  /** Android app: where the take sits in the phone's gallery (content:// link). */
+  gallery_uri?: string
   /** Small poster frame (data URL) for lists. */
   poster?: string
 }

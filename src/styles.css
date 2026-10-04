@@ -97,7 +97,7 @@ h2 {
 .page {
   max-width: 560px;
   margin: 0 auto;
-  padding: calc(env(safe-area-inset-top) + 12px) 16px calc(env(safe-area-inset-bottom) + 32px);
+  padding: calc(max(env(safe-area-inset-top), var(--safe-area-inset-top, 0px)) + 12px) 16px calc(max(env(safe-area-inset-bottom), var(--safe-area-inset-bottom, 0px)) + 32px);
 }
 
 .page-head {
@@ -680,7 +680,7 @@ input[type="checkbox"] {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: calc(env(safe-area-inset-top) + 8px) 10px 8px;
+  padding: calc(max(env(safe-area-inset-top), var(--safe-area-inset-top, 0px)) + 8px) 10px 8px;
   background: linear-gradient(rgba(0, 0, 0, 0.7), transparent);
 }
 
@@ -736,7 +736,7 @@ input[type="checkbox"] {
 
 .controls,
 .review {
-  padding: 12px 16px calc(env(safe-area-inset-bottom) + 24px);
+  padding: 12px 16px calc(max(env(safe-area-inset-bottom), var(--safe-area-inset-bottom, 0px)) + 24px);
   max-width: 560px;
   margin: 0 auto;
 }
@@ -994,4 +994,45 @@ details.more[open] > summary {
 .warn-text {
   color: var(--warn);
   margin: 4px 0;
+}
+
+/* ---------- Android app (0.3) ---------- */
+/* The phone's own camera is drawn behind the page; let it show through the viewport. */
+html.cam-through,
+html.cam-through body,
+html.cam-through #root,
+html.cam-through .director,
+html.cam-through .viewport {
+  background: transparent;
+}
+
+.lens-pills {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 4px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.pill {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 0;
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  letter-spacing: -0.5px;
+}
+
+.pill.on {
+  background: var(--white);
+  color: var(--c900);
+  font-weight: 700;
 }
