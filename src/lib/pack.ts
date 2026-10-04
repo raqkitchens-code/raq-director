@@ -180,6 +180,7 @@ export function buildBrainPrompt(req: BrainRequest): string {
     req.references > 0 ? `معايا ${req.references} صورة مرجعية هبعتها لك.` : "",
     "",
     "اتبع قواعد الهوية (BR_brand-rules-text) وقرارات التسويق، وممنوع ادعاءات DEC-52 وأي سعر أو عرض.",
+    "العدسة الواسعة 0.6 مش متاحة من المتصفح على موبايل خالد: استخدم 1 للقطات الواسعة (المصوّر يرجع لورا)، وfront للستوري والكلام للكاميرا.",
     "رد بخطة واحدة بس في كتلة json بالشكل ده:",
     "```json",
     JSON.stringify(

@@ -8,6 +8,7 @@ import {
   listCameras,
   openCamera,
   pickMime,
+  lensSetupDone,
   readLensMap,
   rememberLens,
   setTorch,
@@ -96,6 +97,9 @@ export function Director({ pack, shotIndex, takes, onSaved, onPackChange, onGo, 
   const [deviceId, setDeviceId] = useState<string | undefined>(() =>
     shot.lens === "front" ? undefined : readLensMap()[shot.lens],
   )
+  // The person can flip to the front camera on any shot (stories, talking to camera).
+  const [facing, setFacing] = useState<"back" | "front">(shot.lens === "front" ? "front" : "back")
+  const useFront = facing === "front"
   const [zoomCaps, setZoomCaps] = useState<{ min: number; max: number; step: number } | null>(null)
   const [zoom, setZoom] = useState(1)
   const [torch, setTorchOn] = useState(false)
@@ -127,7 +131,7 @@ export function Director({ pack, shotIndex, takes, onSaved, onPackChange, onGo, 
   useEffect(() => {
     let cancelled = false
     setError(null)
-    openCamera({ lens: shot.lens, deviceId: shot.lens === "front" ? undefined : deviceId, audio: true })
+    openCamera({ lens: useFront ? "front" : shot.lens, deviceId: useFront ? undefined : deviceId, audio: true })
       .then(async (stream) => {
         if (cancelled) {
           stream.getTracks().forEach((t) => t.stop())
@@ -143,7 +147,7 @@ export function Director({ pack, shotIndex, takes, onSaved, onPackChange, onGo, 
         const z = capabilities(track).zoom ?? null
         setZoomCaps(z)
         // No dedicated camera chosen for this lens yet: get close with zoom.
-        const wanted = deviceId ? 1 : LENS_ZOOM[shot.lens]
+        const wanted = deviceId || useFront ? 1 : LENS_ZOOM[shot.lens]
         const applied = await applyZoom(track, wanted)
         setZoom(applied ?? 1)
         setDevices((await listCameras()).filter((d) => d.back))
@@ -158,7 +162,7 @@ export function Director({ pack, shotIndex, takes, onSaved, onPackChange, onGo, 
     return () => {
       cancelled = true
     }
-  }, [shot.lens, deviceId])
+  }, [shot.lens, deviceId, useFront])
 
   useEffect(
     () => () => {
@@ -478,14 +482,17 @@ export function Director({ pack, shotIndex, takes, onSaved, onPackChange, onGo, 
   if (ready.sharp === false) hints.push("اضغط على الحاجة المهمة في الشاشة عشان تبقى واضحة")
   if (ready.match === false) hints.push("قرّب الكادر من صورة المرجع")
 
-  const lensMissing = shot.lens !== "front" && shot.lens !== "1" && !readLensMap()[shot.lens] && devices.length > 1
+  const lensMissing =
+    !useFront && shot.lens !== "front" && shot.lens !== "1" && !readLensMap()[shot.lens] && devices.length > 1 && !lensSetupDone()
+  // Browsers on most phones only give the main back lens, which cannot zoom out below 1x.
+  const noWide = !useFront && shot.lens === "0.6" && !deviceId && zoomCaps !== null && zoomCaps.min >= 1
 
   const pitchPos = (p: number) => 50 - Math.max(-45, Math.min(45, p)) * (50 / 45)
 
   return (
     <div className="director">
       <div className={`viewport ${phase === "review" ? "reviewing" : ready.ready ? "is-ready" : "is-off"}`} onClick={onTapVideo}>
-        <video ref={videoRef} playsInline muted autoPlay className={shot.lens === "front" ? "mirror" : ""} />
+        <video ref={videoRef} playsInline muted autoPlay className={useFront ? "mirror" : ""} />
 
         {shot.reference_image && phase !== "review" && (
           <img className="ghost" src={shot.reference_image} style={{ opacity: ghost }} alt="" />
@@ -534,6 +541,14 @@ export function Director({ pack, shotIndex, takes, onSaved, onPackChange, onGo, 
             </div>
             <div className="shot-title">{shot.title}</div>
           </div>
+          <button
+            className="ghost-btn"
+            onClick={() => setFacing(useFront ? "back" : "front")}
+            disabled={phase !== "framing"}
+            aria-label={useFront ? "الكاميرا الخلفية" : "الكاميرا الأمامية"}
+          >
+            ⟲
+          </button>
           <div className="nav">
             <button className="ghost-btn" disabled={shotIndex === 0 || phase !== "framing"} onClick={() => onGo(shotIndex - 1)}>
               ‹
@@ -630,10 +645,16 @@ export function Director({ pack, shotIndex, takes, onSaved, onPackChange, onGo, 
             </button>
           )}
 
+          {noWide && (
+            <div className="banner">
+              العدسة الواسعة مش متاحة من المتصفح. صوّر بالعادية وارجع لورا خطوتين عشان المكان كله يدخل.
+            </div>
+          )}
+
           <div className="essentials">
             <div className="ess">
               <span className="muted small">العدسة</span>
-              <b>{LENS_SHORT[shot.lens]}</b>
+              <b>{useFront ? LENS_SHORT.front : noWide ? "١× وارجع لورا" : LENS_SHORT[shot.lens]}</b>
             </div>
             <div className="ess">
               <span className="muted small">الارتفاع</span>
@@ -692,7 +713,7 @@ export function Director({ pack, shotIndex, takes, onSaved, onPackChange, onGo, 
                 </div>
               )}
             </div>
-            {shot.lens !== "front" && devices.length > 1 && (
+            {!useFront && devices.length > 1 && (
               <div className="lens-row">
                 <span className="muted">الكاميرا اللي شغالة دلوقتي:</span>
                 <div className="chips">

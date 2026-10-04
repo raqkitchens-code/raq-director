@@ -25,6 +25,25 @@ export function rememberLens(lens: Lens, deviceId: string) {
   localStorage.setItem(MAP_KEY, JSON.stringify(m))
 }
 
+const SETUP_KEY = "raq-director.lens-setup-done"
+
+/** Lens setup was opened and closed once; stop nagging about unmapped lenses. */
+export function lensSetupDone(): boolean {
+  try {
+    return localStorage.getItem(SETUP_KEY) === "1"
+  } catch {
+    return false
+  }
+}
+
+export function markLensSetupDone() {
+  try {
+    localStorage.setItem(SETUP_KEY, "1")
+  } catch {
+    /* private mode */
+  }
+}
+
 export interface CameraDevice {
   deviceId: string
   label: string

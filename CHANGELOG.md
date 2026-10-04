@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.2 — 2026-10-04
+- Flip button on the shot screen: switch any shot to the front camera (stories, talking to camera).
+- Wide shots on a phone whose browser gives no wide lens: a note to shoot at 1× and step back.
+- Lens setup shows each camera's name and zoom range, how many cameras the browser sees,
+  and retries a lens at 1280×720 when it refuses the default size.
+- The unmapped-lens banner stops once lens setup was finished.
+- Brain prompt: prefer lens 1 and front until the wide lens is reachable.
+
 ## 0.2.1 — 2026-10-04
 - Lens setup: a camera that fails to open is retried (Android releases the previous camera
   a moment late), and the reason is shown with a retry button.
