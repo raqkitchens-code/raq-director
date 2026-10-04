@@ -387,8 +387,6 @@ export function Director({ pack, shotIndex, takes, onSaved, onPackChange, onGo, 
     if (!att.current) return
     const old = readCalibration()
     saveCalibration({ pitch: att.current.pitch + old.pitch, roll: att.current.roll + old.roll })
-    // Restart listening with the new zero.
-    window.location.reload()
   }
 
   const toggleTorch = async () => {

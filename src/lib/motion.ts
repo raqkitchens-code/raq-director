@@ -41,7 +41,10 @@ export function readCalibration(): Attitude {
   }
 }
 
+let current: Attitude | null = null
+
 export function saveCalibration(a: Attitude) {
+  current = a
   localStorage.setItem(CAL, JSON.stringify(a))
 }
 
@@ -54,7 +57,7 @@ export function startMotion(onSample: (s: MotionSample) => void): () => void {
   let py = 9.8
   let pz = 0
   let first = true
-  const cal = readCalibration()
+  current = readCalibration()
   const handler = (e: DeviceMotionEvent) => {
     const g = e.accelerationIncludingGravity
     if (!g || g.x == null || g.y == null || g.z == null) return
@@ -67,6 +70,7 @@ export function startMotion(onSample: (s: MotionSample) => void): () => void {
     const a = attitudeFromGravity(px, py, pz)
     const r = e.rotationRate
     const rot = r ? Math.hypot(r.alpha ?? 0, r.beta ?? 0, r.gamma ?? 0) : 0
+    const cal = current ?? { pitch: 0, roll: 0 }
     onSample({ pitch: a.pitch - cal.pitch, roll: a.roll - cal.roll, rot, t: performance.now() })
   }
   window.addEventListener("devicemotion", handler)
