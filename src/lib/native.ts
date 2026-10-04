@@ -45,7 +45,7 @@ export interface LensReport {
 }
 
 interface RaqCameraPlugin {
-  start(o: { facing: "back" | "front"; lens: Lens; rect: Rect }): Promise<CamState>
+  start(o: { facing: "back" | "front"; lens: Lens; rect: Rect; wideCameraId?: string }): Promise<CamState>
   setPreview(o: { visible: boolean; rect?: Rect }): Promise<void>
   stop(): Promise<void>
   setZoom(o: { ratio: number }): Promise<{ zoom: number }>
@@ -63,6 +63,7 @@ interface RaqCameraPlugin {
   stopSpeaking(): Promise<void>
   vibrate(o: { pattern: number[] }): Promise<void>
   addListener(event: "frame", cb: (f: { w: number; h: number; luma: string }) => void): Promise<PluginListenerHandle>
+  addListener(event: "lens", cb: (s: CamState) => void): Promise<PluginListenerHandle>
 }
 
 export const RaqCamera = registerPlugin<RaqCameraPlugin>("RaqCamera")
@@ -89,4 +90,24 @@ export function decodeLuma(b64: string): Float32Array {
 export function rectOf(el: Element): Rect {
   const r = el.getBoundingClientRect()
   return { x: r.left, y: r.top, w: r.width, h: r.height }
+}
+
+const WIDE_KEY = "raq-director.wide-camera"
+
+/** The back camera the person picked as the wide lens on the lens page, if any. */
+export function readWideCamera(): string | undefined {
+  try {
+    return localStorage.getItem(WIDE_KEY) ?? undefined
+  } catch {
+    return undefined
+  }
+}
+
+export function saveWideCamera(id: string | null) {
+  try {
+    if (id) localStorage.setItem(WIDE_KEY, id)
+    else localStorage.removeItem(WIDE_KEY)
+  } catch {
+    /* private mode */
+  }
 }

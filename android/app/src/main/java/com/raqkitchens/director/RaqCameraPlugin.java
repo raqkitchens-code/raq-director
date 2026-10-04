@@ -118,6 +118,8 @@ public class RaqCameraPlugin extends Plugin {
     private String lens = "1";
     private String lensMode = "zoom";
     private String boundCameraId = null;
+    /** A back camera the person chose as the wide lens on the lens page. */
+    private String wideCameraId = null;
 
     private TextToSpeech tts;
     private boolean ttsArabic = false;
@@ -170,6 +172,7 @@ public class RaqCameraPlugin extends Plugin {
     private void doStart(PluginCall call) {
         facing = call.getString("facing", "back");
         lens = call.getString("lens", "1");
+        wideCameraId = call.getString("wideCameraId", null);
         getActivity().runOnUiThread(() -> {
             ensurePreviewView();
             placePreview(call.getObject("rect", null));
@@ -301,18 +304,19 @@ public class RaqCameraPlugin extends Plugin {
             LensInfo li = describe(id);
             if (li != null && main != null && li.fov > main.fov * 1.15 && (best == null || li.fov > best.fov)) best = li;
         }
-        if (best != null) {
-            final String id = best.id;
-            CameraSelector sel = new CameraSelector.Builder()
-                .addCameraFilter(infos -> {
-                    List<CameraInfo> out = new ArrayList<>();
-                    for (CameraInfo i : infos) if (id.equals(Camera2CameraInfo.from(i).getCameraId())) out.add(i);
-                    return out;
-                })
-                .build();
-            bind(sel, null);
-            lensMode = "camera";
-            return state();
+        // A camera picked by hand on the lens page wins over the automatic choice.
+        String pick = wideCameraId != null && !wideCameraId.equals(boundCameraId) ? wideCameraId : (best != null ? best.id : null);
+        if (pick != null) {
+            try {
+                bind(selectorFor(pick), null);
+                lensMode = "camera";
+                watchForOpenError();
+                return state();
+            } catch (Exception e) {
+                // Some phones list a lens they will not open for apps; stay on the main one.
+                Log.w(TAG, "wide camera " + pick + " failed", e);
+                bind(CameraSelector.DEFAULT_BACK_CAMERA, null);
+            }
         }
         String physical = widestPhysical(boundCameraId, main);
         if (physical != null) {
@@ -367,6 +371,32 @@ public class RaqCameraPlugin extends Plugin {
         }
         videoCapture = vc;
         boundCameraId = Camera2CameraInfo.from(camera.getCameraInfo()).getCameraId();
+    }
+
+    /** If the separate wide camera fails after opening, go back to the main one and tell the page. */
+    private void watchForOpenError() {
+        final Camera watched = camera;
+        watched.getCameraInfo().getCameraState().observe((LifecycleOwner) getActivity(), st -> {
+            if (st.getError() == null || camera != watched || !"camera".equals(lensMode)) return;
+            Log.w(TAG, "wide camera error " + st.getError().getCode());
+            try {
+                bind(CameraSelector.DEFAULT_BACK_CAMERA, null);
+                lensMode = "none";
+                notifyListeners("lens", state());
+            } catch (Exception e) {
+                Log.e(TAG, "fallback failed", e);
+            }
+        });
+    }
+
+    private static CameraSelector selectorFor(String id) {
+        return new CameraSelector.Builder()
+            .addCameraFilter(infos -> {
+                List<CameraInfo> out = new ArrayList<>();
+                for (CameraInfo i : infos) if (id.equals(Camera2CameraInfo.from(i).getCameraId())) out.add(i);
+                return out;
+            })
+            .build();
     }
 
     private JSObject state() {

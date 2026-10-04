@@ -37,7 +37,7 @@ import {
   startMotion,
   type MotionSample,
 } from "../lib/motion"
-import { RaqCamera, decodeLuma, fileUrl, isNative, rectOf, type CamState } from "../lib/native"
+import { RaqCamera, decodeLuma, fileUrl, isNative, readWideCamera, rectOf, type CamState } from "../lib/native"
 import { takeFileName } from "../lib/files"
 import { consentBlocked } from "../lib/pack"
 import type { CheckResult, Lens, ShootPack, Take } from "../lib/types"
@@ -186,7 +186,7 @@ export function Director({ pack, shotIndex, takes, onSaved, onPackChange, onGo, 
     if (!el) return
     let cancelled = false
     setError(null)
-    RaqCamera.start({ facing, lens: bindLens, rect: rectOf(el) })
+    RaqCamera.start({ facing, lens: bindLens, rect: rectOf(el), wideCameraId: readWideCamera() })
       .then((st) => {
         if (cancelled) return
         setCam(st)
@@ -212,6 +212,21 @@ export function Director({ pack, shotIndex, takes, onSaved, onPackChange, onGo, 
     return () => {
       root.classList.remove("cam-through")
       RaqCamera.stop().catch(() => {})
+    }
+  }, [native])
+
+  // The wide camera can fail after opening; the app then falls back to the main camera.
+  useEffect(() => {
+    if (!native) return
+    let handle: { remove: () => Promise<void> } | null = null
+    let gone = false
+    RaqCamera.addListener("lens", (st) => setCam(st)).then((h) => {
+      if (gone) h.remove()
+      else handle = h
+    })
+    return () => {
+      gone = true
+      handle?.remove()
     }
   }, [native])
 
@@ -754,8 +769,8 @@ export function Director({ pack, shotIndex, takes, onSaved, onPackChange, onGo, 
         {native && !useFront && phase === "framing" && (
           <div className="lens-pills" onClick={(e) => e.stopPropagation()}>
             {LENS_PILLS.map((l) => (
-              <button key={l} className={`pill ${activeLens === l ? "on" : ""}`} onClick={() => selectLens(l)}>
-                {l === "0.6" ? "٫٦" : arNum(l)}
+              <button key={l} dir="ltr" className={`pill ${activeLens === l ? "on" : ""}`} onClick={() => selectLens(l)}>
+                {l === "0.6" ? "٠٫٦" : arNum(l)}
               </button>
             ))}
           </div>

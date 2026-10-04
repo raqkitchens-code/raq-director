@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react"
 import { markLensSetupDone } from "../lib/camera"
 import { arNum } from "../lib/labels"
-import { RaqCamera, type LensReport } from "../lib/native"
+import { RaqCamera, readWideCamera, saveWideCamera, type LensReport } from "../lib/native"
 
 /**
  * Android app: the app picks the lens by itself, so this page only reports what the
@@ -10,6 +10,11 @@ import { RaqCamera, type LensReport } from "../lib/native"
 export function NativeLenses({ onBack }: { onBack: () => void }) {
   const [report, setReport] = useState<LensReport | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [wideId, setWideId] = useState(readWideCamera)
+  const pickWide = (id: string | null) => {
+    saveWideCamera(id)
+    setWideId(id ?? undefined)
+  }
 
   useEffect(() => {
     RaqCamera.lenses()
@@ -48,6 +53,11 @@ export function NativeLenses({ onBack }: { onBack: () => void }) {
               {c.zoomMin !== undefined && ` · zoom ${c.zoomMin.toFixed(2)}–${(c.zoomMax ?? 0).toFixed(1)}`}
               {c.physical.length > 0 && ` · physical ${c.physical.map((p) => `${p.id}:${p.fov}°`).join(", ")}`}
             </p>
+            {c.facing === "back" && back.length > 1 && (
+              <button className={`chip ${wideId === c.id ? "on" : ""}`} onClick={() => pickWide(wideId === c.id ? null : c.id)}>
+                {wideId === c.id ? "دي العدسة الواسعة" : "خليها العدسة الواسعة"}
+              </button>
+            )}
           </li>
         ))}
       </ul>
