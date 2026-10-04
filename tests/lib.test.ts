@@ -148,3 +148,11 @@ describe("camera errors", () => {
     expect(cameraErrorAr(new Error("x"))).toContain("مافتحتش")
   })
 })
+
+describe("app camera frames", () => {
+  it("turns the camera's grayscale bytes into luma values", async () => {
+    const { decodeLuma } = await import("../src/lib/native")
+    const l = decodeLuma(btoa(String.fromCharCode(0, 128, 255)))
+    expect(Array.from(l)).toEqual([0, 128, 255])
+  })
+})

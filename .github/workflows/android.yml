@@ -31,6 +31,27 @@ jobs:
           path: raq-director-*.apk
           retention-days: 30
 
+  # After a merge to main: a release with the APK, so the phone can always fetch
+  # https://github.com/raqkitchens-code/raq-director/releases/latest/download/raq-director.apk
+  release:
+    needs: [apk, emulator]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: { name: raq-director-apk }
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          v=$(cat VERSION)
+          cp raq-director-$v.apk raq-director.apk
+          gh release delete "v$v" --yes --cleanup-tag 2>/dev/null || true
+          gh release create "v$v" raq-director.apk "raq-director-$v.apk" --title "مخرج راق $v" --notes "Android app $v. Install raq-director.apk on the phone." --latest
+
   emulator:
     needs: apk
     runs-on: ubuntu-latest
