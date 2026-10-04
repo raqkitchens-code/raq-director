@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { listCameras, readLensMap, rememberLens, type LensMap } from "../lib/camera"
+import { cameraErrorAr, capabilities, getStreamRetry, listCameras, readLensMap, rememberLens, type LensMap } from "../lib/camera"
 import { arNum } from "../lib/labels"
 import type { Lens } from "../lib/types"
 
@@ -7,6 +7,12 @@ interface Cam {
   deviceId: string
   label: string
   shot: string | null
+  /** Arabic reason when the camera did not open. */
+  error?: string
+  /** Error name for diagnosis, shown on its own line. */
+  code?: string
+  /** Lowest zoom the camera offers; below 1 means it can reach the wide view itself. */
+  minZoom?: number
 }
 
 const SLOTS: { lens: Lens; label: string }[] = [
@@ -15,10 +21,12 @@ const SLOTS: { lens: Lens; label: string }[] = [
   { lens: "3", label: "التقريب ٣×" },
 ]
 
-async function snapshot(deviceId: string): Promise<string | null> {
+async function snapshot(deviceId: string): Promise<Omit<Cam, "deviceId" | "label">> {
   let stream: MediaStream | null = null
   try {
-    stream = await navigator.mediaDevices.getUserMedia({ video: { deviceId: { exact: deviceId } }, audio: false })
+    stream = await getStreamRetry({ video: { deviceId: { exact: deviceId } }, audio: false })
+    const track = stream.getVideoTracks()[0]
+    const minZoom = capabilities(track).zoom?.min
     const v = document.createElement("video")
     v.muted = true
     v.playsInline = true
@@ -30,11 +38,13 @@ async function snapshot(deviceId: string): Promise<string | null> {
     c.width = 240
     c.height = Math.round((240 * v.videoHeight) / (v.videoWidth || 1)) || 320
     c.getContext("2d")?.drawImage(v, 0, 0, c.width, c.height)
-    return c.toDataURL("image/jpeg", 0.7)
-  } catch {
-    return null
+    return { shot: c.toDataURL("image/jpeg", 0.7), minZoom }
+  } catch (e) {
+    return { shot: null, error: cameraErrorAr(e), code: (e as DOMException)?.name ?? String(e) }
   } finally {
     stream?.getTracks().forEach((t) => t.stop())
+    // Let Android release the camera before the next one opens.
+    await new Promise((r) => setTimeout(r, 500))
   }
 }
 
@@ -50,13 +60,14 @@ export function LensSetup({ onBack }: { onBack: () => void }) {
     ;(async () => {
       try {
         // Labels and ids appear only after permission.
-        const s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false })
+        const s = await getStreamRetry({ video: { facingMode: "environment" }, audio: false })
         s.getTracks().forEach((t) => t.stop())
+        await new Promise((r) => setTimeout(r, 500))
         const back = (await listCameras()).filter((c) => c.back)
         const out: Cam[] = []
         for (const c of back) {
           if (cancelled) return
-          out.push({ deviceId: c.deviceId, label: c.label, shot: await snapshot(c.deviceId) })
+          out.push({ deviceId: c.deviceId, label: c.label, ...(await snapshot(c.deviceId)) })
           setCams([...out])
         }
       } catch {
@@ -69,6 +80,12 @@ export function LensSetup({ onBack }: { onBack: () => void }) {
       cancelled = true
     }
   }, [])
+
+  const retry = async (id: string) => {
+    setCams((cs) => cs.map((c) => (c.deviceId === id ? { ...c, error: undefined, code: undefined } : c)))
+    const r = await snapshot(id)
+    setCams((cs) => cs.map((c) => (c.deviceId === id ? { ...c, ...r } : c)))
+  }
 
   const assign = (lens: Lens, id: string) => {
     rememberLens(lens, id)
@@ -94,6 +111,20 @@ export function LensSetup({ onBack }: { onBack: () => void }) {
             {c.shot ? <img src={c.shot} alt="" /> : <div className="ph">مفيش صورة</div>}
             <div className="grow">
               <b>كاميرا {arNum(i + 1)}</b>
+              {c.minZoom !== undefined && c.minZoom < 1 && (
+                <p className="muted small">الكاميرا دي بتوصل للواسعة لوحدها بالتصغير.</p>
+              )}
+              {c.error && (
+                <>
+                  <p className="warn-text small">{c.error}</p>
+                  <p className="muted small" dir="ltr">
+                    {c.code}
+                  </p>
+                  <button className="chip" onClick={() => void retry(c.deviceId)}>
+                    جرّب تاني
+                  </button>
+                </>
+              )}
               <div className="chips">
                 {SLOTS.map((s) => (
                   <button

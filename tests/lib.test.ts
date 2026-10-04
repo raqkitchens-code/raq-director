@@ -139,3 +139,12 @@ describe("guide", () => {
     expect(nextCorrection(shot, a, readiness(shot, a, good, null), good).say).toBe("تمام، صوّر")
   })
 })
+
+describe("camera errors", () => {
+  it("explains a busy camera in Arabic", async () => {
+    const { cameraErrorAr } = await import("../src/lib/camera")
+    expect(cameraErrorAr({ name: "NotReadableError" })).toContain("مشغولة")
+    expect(cameraErrorAr({ name: "NotAllowedError" })).toContain("اسمح")
+    expect(cameraErrorAr(new Error("x"))).toContain("مافتحتش")
+  })
+})

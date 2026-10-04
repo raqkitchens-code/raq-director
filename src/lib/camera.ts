@@ -48,6 +48,46 @@ export interface OpenOptions {
   audio: boolean
 }
 
+const wait = (ms: number) => new Promise((r) => setTimeout(r, ms))
+
+/**
+ * Android releases a camera a moment after its stream stops, so opening the
+ * next lens right away often fails with NotReadableError. Try a few times.
+ */
+export async function getStreamRetry(c: MediaStreamConstraints, tries = 4): Promise<MediaStream> {
+  let last: unknown
+  for (let i = 0; i < tries; i++) {
+    try {
+      return await navigator.mediaDevices.getUserMedia(c)
+    } catch (e) {
+      last = e
+      const name = (e as DOMException)?.name
+      // Permission problems will not fix themselves.
+      if (name === "NotAllowedError" || name === "SecurityError") break
+      await wait(400 * (i + 1))
+    }
+  }
+  throw last
+}
+
+/** Arabic reason for a camera error, for the person to act on. */
+export function cameraErrorAr(e: unknown): string {
+  switch ((e as DOMException)?.name) {
+    case "NotAllowedError":
+    case "SecurityError":
+      return "الكاميرا مقفولة. اسمح بالكاميرا من إعدادات الموقع."
+    case "NotReadableError":
+    case "AbortError":
+      return "الكاميرا دي مشغولة. اقفل أي تطبيق كاميرا تاني وجرّب تاني."
+    case "OverconstrainedError":
+      return "الكاميرا دي مش بتقبل الإعدادات المطلوبة."
+    case "NotFoundError":
+      return "الكاميرا دي مش موجودة دلوقتي."
+    default:
+      return "الكاميرا دي مافتحتش."
+  }
+}
+
 export async function openCamera(o: OpenOptions): Promise<MediaStream> {
   const video: MediaTrackConstraints = {
     width: { ideal: 1920 },
@@ -56,7 +96,7 @@ export async function openCamera(o: OpenOptions): Promise<MediaStream> {
   }
   if (o.deviceId) video.deviceId = { exact: o.deviceId }
   else video.facingMode = o.lens === "front" ? "user" : { ideal: "environment" }
-  return navigator.mediaDevices.getUserMedia({
+  return getStreamRetry({
     video,
     audio: o.audio ? { echoCancellation: false, noiseSuppression: true, autoGainControl: true } : false,
   })
