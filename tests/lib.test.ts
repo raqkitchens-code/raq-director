@@ -122,3 +122,20 @@ describe("checks", () => {
     expect(readiness(shot, null, null, null).ready).toBe(false)
   })
 })
+
+import { nextCorrection } from "../src/lib/checks"
+describe("guide", () => {
+  const good = { mean: 120, clipped: 0.01, sharpness: 150 }
+  it("fixes the horizon first, then the angle", () => {
+    const a = { pitch: 10, roll: 6 }
+    expect(nextCorrection(shot, a, readiness(shot, a, good, null), good).arrow).toBe("turn_left")
+    const b = { pitch: 10, roll: 0 }
+    expect(nextCorrection(shot, b, readiness(shot, b, good, null), good).arrow).toBe("down")
+    const c = { pitch: -10, roll: 0 }
+    expect(nextCorrection(shot, c, readiness(shot, c, good, null), good).arrow).toBe("up")
+  })
+  it("says go when ready", () => {
+    const a = { pitch: 0, roll: 0 }
+    expect(nextCorrection(shot, a, readiness(shot, a, good, null), good).say).toBe("تمام، صوّر")
+  })
+})

@@ -13,9 +13,22 @@ import {
   setTorch,
   type CameraDevice,
 } from "../lib/camera"
-import { evaluateTake, readiness } from "../lib/checks"
+import { evaluateTake, nextCorrection, readiness, type Arrow } from "../lib/checks"
+import {
+  beepCount,
+  beepGo,
+  chimeReady,
+  hasArabicVoice,
+  readPrefs,
+  savePrefs,
+  speak,
+  stopSpeaking,
+  vibrate,
+  type Prefs,
+} from "../lib/feedback"
+import { isDone } from "../lib/progress"
 import { db } from "../lib/db"
-import { FRAMING_AR, HEIGHT_AR, HEIGHT_CM, LENS_AR, MOVE_AR, arNum, pitchAr } from "../lib/labels"
+import { FRAMING_AR, HEIGHT_AR, HEIGHT_CM, LENS_AR, LENS_SHORT, MOVE_AR, MOVE_SHORT, arNum, pitchAr } from "../lib/labels"
 import {
   readCalibration,
   requestMotionPermission,
@@ -33,6 +46,7 @@ interface Props {
   onSaved: (t: Take) => void
   onPackChange: (p: ShootPack) => void
   onGo: (index: number) => void
+  onLensSetup: () => void
   onExit: () => void
 }
 
@@ -58,7 +72,7 @@ function drawCover(ctx: CanvasRenderingContext2D, src: CanvasImageSource, sw: nu
   ctx.drawImage(src, (sw - cw) / 2, (sh - ch) / 2, cw, ch, 0, 0, w, h)
 }
 
-export function Director({ pack, shotIndex, takes, onSaved, onPackChange, onGo, onExit }: Props) {
+export function Director({ pack, shotIndex, takes, onSaved, onPackChange, onGo, onLensSetup, onExit }: Props) {
   const shot = pack.shots[shotIndex]
   const videoRef = useRef<HTMLVideoElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
@@ -73,7 +87,8 @@ export function Director({ pack, shotIndex, takes, onSaved, onPackChange, onGo, 
   const att = useRef<MotionSample | null>(null)
   const refEdges = useRef<Float32Array | null>(null)
   const prompterRef = useRef<HTMLDivElement>(null)
-  const readySince = useRef(0)
+  // Set when the person cancels a countdown; auto-start waits until the frame leaves green.
+  const [autoHeld, setAutoHeld] = useState(false)
 
   const [phase, setPhase] = useState<Phase>("framing")
   const [error, setError] = useState<string | null>(null)
@@ -93,7 +108,15 @@ export function Director({ pack, shotIndex, takes, onSaved, onPackChange, onGo, 
   const [showPrompter, setShowPrompter] = useState(Boolean(shot.prompter))
   const [prompterSpeed, setPrompterSpeed] = useState(40)
   const [ghost, setGhost] = useState(0.35)
-  const [autoStart, setAutoStart] = useState(false)
+  const [prefs, setPrefsState] = useState<Prefs>(readPrefs)
+  const setPref = (k: keyof Prefs, v: boolean) => {
+    const next = { ...prefs, [k]: v }
+    savePrefs(next)
+    setPrefsState(next)
+  }
+  const autoStart = prefs.autoStart
+  const lastSaid = useRef({ text: "", at: 0 })
+  const wasReady = useRef(false)
   const [focusPt, setFocusPt] = useState<{ x: number; y: number } | null>(null)
   const [motionOk, setMotionOk] = useState(true)
 
@@ -279,9 +302,12 @@ export function Director({ pack, shotIndex, takes, onSaved, onPackChange, onGo, 
   useEffect(() => {
     if (phase !== "countdown") return
     if (count <= 0) {
+      beepGo()
       startRecording()
       return
     }
+    if (count === 3) stopSpeaking()
+    beepCount()
     const t = window.setTimeout(() => setCount((c) => c - 1), 1000)
     return () => window.clearTimeout(t)
   }, [phase, count, startRecording])
@@ -310,20 +336,44 @@ export function Director({ pack, shotIndex, takes, onSaved, onPackChange, onGo, 
     return () => cancelAnimationFrame(raf)
   }, [phase, prompterSpeed, shot.duration_s, stopRecording])
 
-  // Optional: start by itself once the frame has been green for a moment
+  const guide = useMemo(() => nextCorrection(shot, attitude, ready, stats), [shot, attitude, ready, stats])
+
+  // Hands-free direction: speak the next correction, celebrate when the frame locks.
   useEffect(() => {
-    if (!autoStart || phase !== "framing" || blocked) return
-    if (!ready.ready) {
-      readySince.current = 0
+    if (phase !== "framing" || blocked) {
+      wasReady.current = false
       return
     }
-    if (!readySince.current) readySince.current = performance.now()
-    else if (performance.now() - readySince.current > 1200) {
-      readySince.current = 0
+    if (ready.ready && !wasReady.current) {
+      wasReady.current = true
+      if (prefs.vibrate) vibrate(80)
+      chimeReady()
+      if (prefs.voice) speak(autoStart ? "تمام، اثبت" : "تمام، صوّر")
+      lastSaid.current = { text: "ready", at: performance.now() }
+      return
+    }
+    if (!ready.ready) wasReady.current = false
+    if (!prefs.voice || !guide.say || ready.ready) return
+    const now = performance.now()
+    if (guide.say !== lastSaid.current.text && now - lastSaid.current.at > 2500) {
+      lastSaid.current = { text: guide.say, at: now }
+      speak(guide.say)
+    }
+  }, [phase, blocked, ready.ready, guide.say, prefs.voice, prefs.vibrate, autoStart])
+
+  // Optional: start by itself once the frame has stayed green for a moment
+  useEffect(() => {
+    if (!ready.ready) {
+      setAutoHeld(false)
+      return
+    }
+    if (!autoStart || autoHeld || phase !== "framing" || blocked) return
+    const t = window.setTimeout(() => {
       setCount(3)
       setPhase("countdown")
-    }
-  }, [autoStart, phase, ready.ready, blocked])
+    }, 1200)
+    return () => window.clearTimeout(t)
+  }, [autoStart, autoHeld, phase, ready.ready, blocked])
 
   useEffect(() => {
     if (phase === "framing" && prompterRef.current) prompterRef.current.style.transform = "translateY(0)"
@@ -334,8 +384,10 @@ export function Director({ pack, shotIndex, takes, onSaved, onPackChange, onGo, 
     if (phase === "framing") {
       setCount(3)
       setPhase("countdown")
-    } else if (phase === "countdown") setPhase("framing")
-    else if (phase === "recording") stopRecording()
+    } else if (phase === "countdown") {
+      setAutoHeld(true)
+      setPhase("framing")
+    } else if (phase === "recording") stopRecording()
   }
 
   const onTapVideo = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -378,9 +430,19 @@ export function Director({ pack, shotIndex, takes, onSaved, onPackChange, onGo, 
         onPackChange({ ...pack, shots })
       }
     }
+    const accepted = keep && review.verdict === "accepted"
     URL.revokeObjectURL(review.url)
     setReview(null)
     setPhase("framing")
+    if (accepted && prefs.autoNext) {
+      const doneNow = (i: number) => i === shotIndex || isDone(takes, pack, pack.shots[i])
+      const order = [...pack.shots.keys()]
+      const next = order.slice(shotIndex + 1).find((i) => !doneNow(i)) ?? order.find((i) => !doneNow(i))
+      if (next === undefined) {
+        if (prefs.voice) speak("خلصنا كل اللقطات")
+        onExit()
+      } else onGo(next)
+    }
   }
 
   const calibrate = () => {
@@ -416,6 +478,8 @@ export function Director({ pack, shotIndex, takes, onSaved, onPackChange, onGo, 
   if (ready.sharp === false) hints.push("اضغط على الحاجة المهمة في الشاشة عشان تبقى واضحة")
   if (ready.match === false) hints.push("قرّب الكادر من صورة المرجع")
 
+  const lensMissing = shot.lens !== "front" && shot.lens !== "1" && !readLensMap()[shot.lens] && devices.length > 1
+
   const pitchPos = (p: number) => 50 - Math.max(-45, Math.min(45, p)) * (50 / 45)
 
   return (
@@ -442,6 +506,7 @@ export function Director({ pack, shotIndex, takes, onSaved, onPackChange, onGo, 
             <div className={`pitch-dot ${ready.pitch ? "ok" : ""}`} style={{ top: `${pitchPos(attitude.pitch)}%` }} />
           </div>
         )}
+        {phase === "framing" && guide.arrow && <GuideArrow arrow={guide.arrow} />}
         {focusPt && <div className="focus-ring" style={{ left: `${focusPt.x * 100}%`, top: `${focusPt.y * 100}%` }} />}
 
         {showPrompter && shot.prompter && phase !== "review" && (
@@ -496,7 +561,7 @@ export function Director({ pack, shotIndex, takes, onSaved, onPackChange, onGo, 
         {phase !== "review" && (
           <div className="status-strip" onClick={(e) => e.stopPropagation()}>
             {ready.ready ? (
-              <div className="state ok">الكادر مظبوط. صوّر</div>
+              <div className="state ok">{autoStart && !autoHeld ? "الكادر مظبوط. اثبت، هيصوّر لوحده" : "الكادر مظبوط. صوّر"}</div>
             ) : (
               hints.slice(0, 2).map((h) => (
                 <div key={h} className="state warn">
@@ -559,97 +624,152 @@ export function Director({ pack, shotIndex, takes, onSaved, onPackChange, onGo, 
             </div>
           )}
           {error && <div className="banner warn">{error}</div>}
+          {lensMissing && (
+            <button className="banner warn as-btn" onClick={onLensSetup}>
+              {LENS_AR[shot.lens]} لسه مش متظبطة. دوس هنا واختارها مرة واحدة.
+            </button>
+          )}
 
-          <div className="brief">
-            <div>
-              <b>الكادر:</b> {FRAMING_AR[shot.framing]}
+          <div className="essentials">
+            <div className="ess">
+              <span className="muted small">العدسة</span>
+              <b>{LENS_SHORT[shot.lens]}</b>
             </div>
-            <div>
-              <b>العدسة:</b> {LENS_AR[shot.lens]}
+            <div className="ess">
+              <span className="muted small">الارتفاع</span>
+              <b>{HEIGHT_CM[shot.height]}</b>
             </div>
-            <div>
-              <b>الارتفاع:</b> {HEIGHT_AR[shot.height]} ({HEIGHT_CM[shot.height]})
+            <div className="ess">
+              <span className="muted small">الحركة</span>
+              <b>{MOVE_SHORT[shot.move]}</b>
             </div>
-            <div>
-              <b>الزاوية:</b> {pitchAr(shot.pitch_deg)}
-            </div>
-            <div>
-              <b>الحركة:</b> {MOVE_AR[shot.move]}
-            </div>
-            <div>
-              <b>المدة:</b> من {arNum(shot.duration_s[0])} لـ {arNum(shot.duration_s[1])} ثانية
-            </div>
-            {shot.direction && <div className="direction">{shot.direction}</div>}
-            {shotTakes.length > 0 && (
-              <div className="muted">
-                محفوظ {arNum(shotTakes.length)} لقطة، منهم {arNum(shotTakes.filter((t) => t.verdict === "accepted").length)} مقبولة
-              </div>
-            )}
           </div>
+          {shot.direction && <p className="direction">{shot.direction}</p>}
 
-          {shot.lens !== "front" && devices.length > 1 && (
-            <div className="lens-row">
-              <span className="muted">اختار الكاميرا اللي هي {LENS_AR[shot.lens]}:</span>
-              <div className="chips">
-                {devices.map((d, i) => (
-                  <button
-                    key={d.deviceId}
-                    className={`chip ${deviceId === d.deviceId ? "on" : ""}`}
-                    onClick={() => pickDevice(d.deviceId)}
-                    disabled={phase !== "framing"}
-                  >
-                    {arNum(i + 1)}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-          {zoomCaps && (
-            <label className="slider">
-              <span>التقريب {arNum(zoom.toFixed(1))}×</span>
-              <input
-                type="range"
-                min={zoomCaps.min}
-                max={Math.min(zoomCaps.max, 10)}
-                step={zoomCaps.step || 0.1}
-                value={zoom}
-                onChange={(e) => onZoom(Number(e.target.value))}
-              />
-            </label>
-          )}
-          {shot.prompter && (
-            <label className="slider">
-              <span>سرعة الملقّن</span>
-              <input type="range" min={10} max={120} value={prompterSpeed} onChange={(e) => setPrompterSpeed(Number(e.target.value))} />
-            </label>
-          )}
-          {shot.reference_image && (
-            <label className="slider">
-              <span>شفافية المرجع</span>
-              <input type="range" min={0} max={0.8} step={0.05} value={ghost} onChange={(e) => setGhost(Number(e.target.value))} />
-            </label>
-          )}
           <div className="chips">
+            <button className={`chip ${prefs.autoStart ? "on" : ""}`} onClick={() => setPref("autoStart", !prefs.autoStart)}>
+              يصوّر لوحده لما ينوّر
+            </button>
+            <button className={`chip ${prefs.voice ? "on" : ""}`} onClick={() => setPref("voice", !prefs.voice)}>
+              المخرج بيتكلم
+            </button>
             {shot.prompter && (
               <button className={`chip ${showPrompter ? "on" : ""}`} onClick={() => setShowPrompter(!showPrompter)}>
                 الملقّن
               </button>
             )}
-            <button className={`chip ${autoStart ? "on" : ""}`} onClick={() => setAutoStart(!autoStart)}>
-              يبدأ لوحده لما ينوّر أخضر
-            </button>
-            <button className={`chip ${torch ? "on" : ""}`} onClick={toggleTorch}>
-              الكشاف
-            </button>
-            <button className="chip" onClick={calibrate}>
-              صفّر الميزان
-            </button>
           </div>
-          <p className="muted small">
-            «صفّر الميزان»: اسند الموبايل واقف على حيطة مستقيمة، واضغط مرة واحدة.
-          </p>
+          {prefs.voice && !hasArabicVoice() && (
+            <p className="muted small">
+              الموبايل مفيهوش صوت عربي للمتصفح، فالمخرج هيوجهك بالأسهم والصفارات. تقدر تنزّل الصوت العربي من إعدادات تحويل النص لكلام في الموبايل.
+            </p>
+          )}
+
+          <details className="more">
+            <summary>تفاصيل وأدوات</summary>
+            <div className="brief">
+              <div>
+                <b>الكادر:</b> {FRAMING_AR[shot.framing]}
+              </div>
+              <div>
+                <b>العدسة:</b> {LENS_AR[shot.lens]}
+              </div>
+              <div>
+                <b>الارتفاع:</b> {HEIGHT_AR[shot.height]} ({HEIGHT_CM[shot.height]})
+              </div>
+              <div>
+                <b>الزاوية:</b> {pitchAr(shot.pitch_deg)}
+              </div>
+              <div>
+                <b>الحركة:</b> {MOVE_AR[shot.move]}
+              </div>
+              <div>
+                <b>المدة:</b> من {arNum(shot.duration_s[0])} لـ {arNum(shot.duration_s[1])} ثانية
+              </div>
+              {shotTakes.length > 0 && (
+                <div className="muted">
+                  محفوظ {arNum(shotTakes.length)} لقطة، منهم {arNum(shotTakes.filter((t) => t.verdict === "accepted").length)} مقبولة
+                </div>
+              )}
+            </div>
+            {shot.lens !== "front" && devices.length > 1 && (
+              <div className="lens-row">
+                <span className="muted">الكاميرا اللي شغالة دلوقتي:</span>
+                <div className="chips">
+                  {devices.map((d, i) => (
+                    <button
+                      key={d.deviceId}
+                      className={`chip ${deviceId === d.deviceId ? "on" : ""}`}
+                      onClick={() => pickDevice(d.deviceId)}
+                      disabled={phase !== "framing"}
+                    >
+                      {arNum(i + 1)}
+                    </button>
+                  ))}
+                  <button className="chip" onClick={onLensSetup}>
+                    ظبط العدسات
+                  </button>
+                </div>
+              </div>
+            )}
+            {zoomCaps && (
+              <label className="slider">
+                <span>التقريب {arNum(zoom.toFixed(1))}×</span>
+                <input
+                  type="range"
+                  min={zoomCaps.min}
+                  max={Math.min(zoomCaps.max, 10)}
+                  step={zoomCaps.step || 0.1}
+                  value={zoom}
+                  onChange={(e) => onZoom(Number(e.target.value))}
+                />
+              </label>
+            )}
+            {shot.prompter && (
+              <label className="slider">
+                <span>سرعة الملقّن</span>
+                <input type="range" min={10} max={120} value={prompterSpeed} onChange={(e) => setPrompterSpeed(Number(e.target.value))} />
+              </label>
+            )}
+            {shot.reference_image && (
+              <label className="slider">
+                <span>شفافية المرجع</span>
+                <input type="range" min={0} max={0.8} step={0.05} value={ghost} onChange={(e) => setGhost(Number(e.target.value))} />
+              </label>
+            )}
+            <div className="chips">
+              <button className={`chip ${prefs.autoNext ? "on" : ""}`} onClick={() => setPref("autoNext", !prefs.autoNext)}>
+                يروح للقطة الجاية لوحده
+              </button>
+              <button className={`chip ${prefs.vibrate ? "on" : ""}`} onClick={() => setPref("vibrate", !prefs.vibrate)}>
+                رعشة لما ينوّر
+              </button>
+              <button className={`chip ${torch ? "on" : ""}`} onClick={toggleTorch}>
+                الكشاف
+              </button>
+              <button className="chip" onClick={calibrate}>
+                صفّر الميزان
+              </button>
+            </div>
+            <p className="muted small">«صفّر الميزان»: اسند الموبايل واقف على حيطة مستقيمة، واضغط مرة واحدة.</p>
+          </details>
         </section>
       )}
     </div>
   )
+}
+
+const ARROWS: Record<Arrow, { icon: string; cls: string }> = {
+  up: { icon: "⬆", cls: "" },
+  down: { icon: "⬇", cls: "" },
+  turn_left: { icon: "↺", cls: "" },
+  turn_right: { icon: "↻", cls: "" },
+  light: { icon: "☀", cls: "small-icon" },
+  focus: { icon: "◎", cls: "small-icon" },
+  match: { icon: "▣", cls: "small-icon" },
+}
+
+function GuideArrow({ arrow }: { arrow: Arrow }) {
+  const a = ARROWS[arrow]
+  return <div className={`guide-arrow ${a.cls}`}>{a.icon}</div>
 }

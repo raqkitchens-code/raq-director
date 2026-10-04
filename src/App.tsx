@@ -2,12 +2,14 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { Director } from "./components/Director"
 import { Home } from "./components/Home"
 import { Import } from "./components/Import"
+import { LensSetup } from "./components/LensSetup"
 import { Lock } from "./components/Lock"
 import { NewRequest } from "./components/NewRequest"
 import { PackView } from "./components/PackView"
 import { Takes } from "./components/Takes"
 import { db, persistStorage } from "./lib/db"
 import { LIBRARY_PACK } from "./lib/library"
+import { unlockAudio } from "./lib/feedback"
 import { RELOCK_MS } from "./lib/lock"
 import type { ShootPack, Take } from "./lib/types"
 
@@ -18,6 +20,7 @@ type View =
   | { name: "new" }
   | { name: "import" }
   | { name: "takes" }
+  | { name: "lens"; back: View }
 
 export function App() {
   const [unlocked, setUnlocked] = useState(false)
@@ -51,7 +54,12 @@ export function App() {
     await db.savePack(p)
   }, [])
 
-  if (!unlocked) return <Lock onUnlock={() => setUnlocked(true)} />
+  if (!unlocked) return <Lock
+        onUnlock={() => {
+          unlockAudio()
+          setUnlocked(true)
+        }}
+      />
 
   const pack = "id" in view ? packs.find((p) => p.id === view.id) : undefined
   const home = () => setView({ name: "home" })
@@ -83,6 +91,7 @@ export function App() {
           onPackChange={savePack}
           onGo={(index) => setView({ name: "shoot", id: pack.id, index })}
           onExit={() => setView({ name: "pack", id: pack.id })}
+          onLensSetup={() => setView({ name: "lens", back: view })}
         />
       ) : null
     case "new":
@@ -108,6 +117,8 @@ export function App() {
       )
     case "takes":
       return <Takes packs={packs} takes={takes} onBack={home} onDeleted={(id) => setTakes((ts) => ts.filter((t) => t.id !== id))} />
+    case "lens":
+      return <LensSetup onBack={() => setView(view.back)} />
     default:
       return (
         <Home
@@ -118,6 +129,7 @@ export function App() {
           onNew={() => setView({ name: "new" })}
           onImport={() => setView({ name: "import" })}
           onTakes={() => setView({ name: "takes" })}
+          onLensSetup={() => setView({ name: "lens", back: { name: "home" } })}
           onLock={() => setUnlocked(false)}
         />
       )
