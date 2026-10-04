@@ -24,15 +24,18 @@ page.on("console", (m) => {
   if (m.type() === "error") errors.push(m.text())
 })
 
+// Playwright sees the Android web view's elements as off-screen, so clicks go through the DOM.
+const tap = (loc) => loc.dispatchEvent("click")
 const snap = async (n) => writeFileSync(`${OUT}/${n}.png`, await device.screenshot())
 const pin = async (digits) => {
-  for (const d of digits) await page.getByRole("button", { name: "٠١٢٣٤٥٦٧٨٩"[Number(d)], exact: true }).click()
-  await page.getByRole("button", { name: "تمام" }).click()
+  for (const d of digits) await tap(page.getByRole("button", { name: "٠١٢٣٤٥٦٧٨٩"[Number(d)], exact: true }))
+  await tap(page.getByRole("button", { name: "تمام" }))
 }
 
 try {
   await page.waitForLoadState("domcontentloaded")
   await page.waitForTimeout(1500)
+  results.viewport = await page.evaluate(() => ({ w: innerWidth, h: innerHeight, dpr: devicePixelRatio }))
   await snap("01-lock")
   await pin("246810")
   await pin("246810")
@@ -43,7 +46,7 @@ try {
   results.lenses = await page.evaluate(() => window.Capacitor?.Plugins?.RaqCamera?.lenses())
   log("lenses", JSON.stringify(results.lenses))
 
-  await page.getByRole("button", { name: "ابدأ التصوير" }).click()
+  await tap(page.getByRole("button", { name: "ابدأ التصوير" }))
   await page.waitForTimeout(6000)
   await snap("03-director")
   results.camThrough = await page.evaluate(() => document.documentElement.classList.contains("cam-through"))
@@ -53,11 +56,11 @@ try {
 
   // Wide lens pill: what the app could do on this phone.
   if (results.pills) {
-    await page.locator(".lens-pills .pill").first().click()
+    await tap(page.locator(".lens-pills .pill").first())
     await page.waitForTimeout(3000)
     await snap("04-wide")
     results.wideBanner = await page.locator(".controls .banner").allInnerTexts()
-    await page.locator(".lens-pills .pill").nth(1).click()
+    await tap(page.locator(".lens-pills .pill").nth(1))
     await page.waitForTimeout(2500)
   }
 
@@ -68,24 +71,24 @@ try {
       await page.locator(".rec-badge").waitFor({ timeout: 6000 }).catch(() => {})
       break
     }
-    await rec.click()
+    await tap(rec)
     await page.waitForTimeout(4200)
   }
   results.recording = (await page.locator(".rec-badge").count()) > 0
   await page.waitForTimeout(4000)
   await snap("05-recording")
-  await rec.click().catch(() => {})
+  await tap(rec).catch(() => {})
   await page.locator(".verdict").waitFor({ timeout: 20_000 })
   await page.waitForTimeout(1500)
   await snap("06-review")
   results.verdict = await page.locator(".verdict").innerText()
   results.savedNote = await page.getByText("اتحفظت في الجاليري").count()
   results.reviewBanner = await page.locator(".review .banner").allInnerTexts()
-  await page.locator(".review .btn").first().click()
+  await tap(page.locator(".review .btn").first())
   await page.waitForTimeout(1500)
 
   // Front camera
-  await page.getByRole("button", { name: "الكاميرا الأمامية" }).click().catch(() => {})
+  await tap(page.getByRole("button", { name: "الكاميرا الأمامية" })).catch(() => {})
   await page.waitForTimeout(3000)
   await snap("07-front")
 } catch (e) {

@@ -56,6 +56,8 @@ jobs:
     needs: apk
     runs-on: ubuntu-latest
     timeout-minutes: 40
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -82,6 +84,17 @@ jobs:
             adb logcat -c
             node scripts/android-e2e.mjs || (adb logcat -d -s RaqCamera:* AndroidRuntime:* Capacitor:* chromium:* CameraX:* | tail -200; exit 1)
             adb logcat -d -s RaqCamera:* AndroidRuntime:* | tail -60
+      # Screenshots also go to a side branch so they can be read without downloading artifacts.
+      - name: Publish screenshots to ci/android-e2e
+        if: always() && github.event_name == 'push'
+        run: |
+          [ -d test-results/android ] || exit 0
+          cd test-results/android
+          git init -q -b ci/android-e2e
+          git config user.name "raq-ci" && git config user.email "ci@users.noreply.github.com"
+          echo "${{ github.sha }}" > SOURCE_SHA
+          git add -A && git commit -qm "Android e2e for ${{ github.sha }}"
+          git push -qf "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" ci/android-e2e
       - uses: actions/upload-artifact@v4
         if: always()
         with:
