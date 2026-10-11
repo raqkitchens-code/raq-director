@@ -2,6 +2,7 @@ import { useRef, useState } from "react"
 import { imageFileToDataUrl } from "../lib/files"
 import { FRAMING_AR, LENS_AR, PILLAR_AR, arNum } from "../lib/labels"
 import { LIBRARY_PACK } from "../lib/library"
+import { packToLink } from "../lib/link"
 import { isDone, keptFor, packProgress } from "../lib/progress"
 import type { ShootPack, Take } from "../lib/types"
 
@@ -18,6 +19,7 @@ export function PackView({ pack, takes, onBack, onShoot, onChange, onDelete }: P
   const fileRef = useRef<HTMLInputElement>(null)
   const [refFor, setRefFor] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [shared, setShared] = useState<string | null>(null)
   const pr = packProgress(takes, pack)
   const needsConsent = pack.kind === "project" || pack.shots.some((s) => s.needs_consent)
   const builtIn = pack.id === LIBRARY_PACK.id
@@ -36,6 +38,26 @@ export function PackView({ pack, takes, onBack, onShoot, onChange, onDelete }: P
       setError((e as Error).message)
     }
     if (fileRef.current) fileRef.current.value = ""
+  }
+
+  const shareLink = async () => {
+    const { url, droppedImages } = await packToLink(pack)
+    const note = droppedImages ? "الرابط اتبعت من غير صور المرجع عشان يفضل قصير." : null
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: pack.title, url })
+        setShared(note ?? "اتبعت ✓")
+        return
+      }
+    } catch (e) {
+      if ((e as Error).name === "AbortError") return
+    }
+    try {
+      await navigator.clipboard.writeText(url)
+      setShared(note ?? "الرابط اتنسخ ✓ ابعته على الواتساب")
+    } catch {
+      window.prompt("انسخ الرابط ده:", url)
+    }
   }
 
   const clearRef = (i: number) =>
@@ -104,6 +126,15 @@ export function PackView({ pack, takes, onBack, onShoot, onChange, onDelete }: P
       </ol>
 
       <input ref={fileRef} type="file" accept="image/*" hidden onChange={(e) => onFile(e.target.files?.[0])} />
+
+      {!builtIn && (
+        <section className="card">
+          <button className="btn wide" onClick={shareLink}>
+            ابعت الخطة برابط
+          </button>
+          {shared && <p className="muted small">{shared}</p>}
+        </section>
+      )}
 
       {!builtIn && (
         <button

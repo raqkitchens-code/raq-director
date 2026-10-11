@@ -155,3 +155,72 @@ export function scriptPack(title: string, script: string, lens: "front" | "1" = 
     }),
   }
 }
+
+/**
+ * «معاينة»: the site visit before design. The footage is the team's record of the room
+ * (walls, openings, water, drain, gas, power, ceiling, floor, access), checked against
+ * the survey form and the planner. Not for publishing.
+ */
+export function surveyPack(projectCode: string, consent: boolean, notes: string): ShootPack {
+  const p = (s: S): Shot => ({ ...base(s), needs_consent: true })
+  return {
+    format: PACK_FORMAT,
+    id: `SURVEY-${projectCode}-${Date.now().toString(36)}`,
+    title: `معاينة ${projectCode}`,
+    kind: "project",
+    project_code: projectCode,
+    consent_confirmed: consent,
+    notes:
+      notes ||
+      "تصوير المعاينة للفريق بس، مش للنشر. المتر يبان في كل لقطة فيها مقاس، وقول بصوتك اسم الحيطة والرقم وانت بتصوّر.",
+    created_at: new Date().toISOString(),
+    shots: [
+      p({ id: "M01", title: "المكان كله من الباب", purpose: "شكل المكان قبل أي شغل، ونفس المكان هيتصوّر تاني يوم التسليم", framing: "wide", lens: "0.6", height: "chest", pitch_deg: 0, move: "static", duration_s: [3, 6], direction: "قف على عتبة الباب بالظبط وعلّم مكان رجلك. يوم التسليم هنقف في نفس المكان." }),
+      p({ id: "M02", title: "لفة كاملة بالراحة", framing: "wide", lens: "0.6", height: "chest", pitch_deg: 0, move: "pan_right", duration_s: [8, 15], direction: "من نص المكان لف لفة كاملة ببطء، من غير ما توقف." }),
+      p({ id: "M03", title: "كل حيطة لوحدها", purpose: "الحيطان اللي هيتركب عليها", framing: "wide", lens: "0.6", height: "chest", pitch_deg: 0, move: "static", duration_s: [4, 8], direction: "صوّر كل حيطة من الحيطة اللي قصادها، والخطوط الرأسية مستقيمة. قول اسمها: حيطة الشباك، حيطة الباب… خد لقطة لكل حيطة." }),
+      p({ id: "M04", title: "الشباك والباب بالمتر", framing: "medium", lens: "1", height: "chest", pitch_deg: 0, move: "static", duration_s: [4, 8], direction: "المتر مشدود على العرض وبعدين الارتفاع، والأرقام باينة. وكمان المسافة من الأرض لحد الشباك." }),
+      p({ id: "M05", title: "الصرف ومحابس المية", framing: "close", lens: "1", height: "knee", pitch_deg: -45, move: "static", duration_s: [3, 6], direction: "مكان الصرف والمحابس، والمتر من الركنة ومن الأرض." }),
+      p({ id: "M06", title: "الغاز ومكان البوتاجاز", framing: "close", lens: "1", height: "waist", pitch_deg: -20, move: "static", duration_s: [3, 6], direction: "خط الغاز أو مكان الأنبوبة، والمسافة من أقرب ركنة." }),
+      p({ id: "M07", title: "الكهربا: البرايز والمفاتيح", framing: "medium", lens: "1", height: "chest", pitch_deg: 0, move: "slide", duration_s: [5, 10], direction: "امشي على الحيطان وصوّر كل بريزة ومفتاح، ولوحة الكهربا لو قريبة." }),
+      p({ id: "M08", title: "السقف والكمرات", framing: "wide", lens: "0.6", height: "chest", pitch_deg: 30, move: "tilt_up", duration_s: [4, 8], direction: "ابدأ من الأرض واطلع للسقف بالراحة. صوّر المتر من الأرض للسقف وتحت أي كمرة." }),
+      p({ id: "M09", title: "الأعمدة والبروزات والزوايا", framing: "close", lens: "1", height: "chest", pitch_deg: 0, move: "static", duration_s: [3, 6], direction: "أي عمود أو بروز أو زاوية مش قايمة، بالمتر." }),
+      p({ id: "M10", title: "الأرضية", framing: "close", lens: "1", height: "high", pitch_deg: -60, move: "slide", duration_s: [4, 8], direction: "نوع الأرضية، وأي ميل أو فرق منسوب. لو معاك ميزان مية حطه وصوّره." }),
+      p({ id: "M11", title: "العيوب: رطوبة وشروخ", purpose: "نتفق عليها قبل التصنيع", framing: "close", lens: "1", height: "chest", pitch_deg: 0, move: "static", duration_s: [3, 6], direction: "أي رطوبة أو شرخ أو حيطة مش مستقيمة. لو مفيش، صوّر الحيطة اللي ورا مكان الحوض." }),
+      p({ id: "M12", title: "المدخل والسلم والأسانسير", purpose: "طريق الوحدات يوم التركيب", framing: "medium", lens: "0.6", height: "chest", pitch_deg: 0, move: "push_in", duration_s: [4, 8], direction: "من باب العمارة لحد باب الشقة: عرض السلم والأسانسير وأي لفة ضيقة." }),
+    ],
+  }
+}
+
+/**
+ * «تسليم»: handover day. A full record of the finished work for the client file,
+ * plus the best shots for publishing once the client agrees (DEC-51).
+ */
+export function handoverPack(projectCode: string, consent: boolean, notes: string): ShootPack {
+  const p = (s: S): Shot => ({ ...base(s), pillar: "real_projects", needs_consent: true })
+  return {
+    format: PACK_FORMAT,
+    id: `HANDOVER-${projectCode}-${Date.now().toString(36)}`,
+    title: `تسليم ${projectCode}`,
+    kind: "project",
+    project_code: projectCode,
+    consent_confirmed: consent,
+    notes:
+      notes ||
+      "قبل التصوير: المطبخ نضيف، والحماية والكراتين برّه، وكل النور شغال، ومفيش حاجة شخصية للعميل في الكادر.",
+    created_at: new Date().toISOString(),
+    shots: [
+      p({ id: "H01", title: "أجمل لقطة: المطبخ كله", purpose: "أول ٣ ثواني في الفيديو", framing: "wide", lens: "0.6", height: "chest", pitch_deg: 0, move: "push_in", duration_s: [3, 5], direction: "نوّر المكان كله وادخل بخطوة بطيئة ثابتة." }),
+      p({ id: "H02", title: "قبل وبعد: من مكان المعاينة", purpose: "نفس كادر أول لقطة في المعاينة", framing: "wide", lens: "0.6", height: "chest", pitch_deg: 0, move: "static", duration_s: [3, 6], direction: "قف في نفس المكان اللي صوّرت منه أول لقطة يوم المعاينة. حط صورة منها كمرجع لو معاك." }),
+      p({ id: "H03", title: "كل حيطة مستقيمة", framing: "wide", lens: "0.6", height: "chest", pitch_deg: 0, move: "static", duration_s: [3, 5], direction: "في نص كل حيطة بالظبط، والخطوط الرأسية مستقيمة. لقطة لكل حيطة." }),
+      p({ id: "H04", title: "الركنة", framing: "medium", lens: "1", height: "chest", pitch_deg: -5, move: "pan_left", duration_s: [4, 6], direction: "لف بالراحة من حيطة لحيطة عبر الركنة." }),
+      p({ id: "H05", title: "درج بيقفل لوحده", framing: "detail", lens: "1", height: "waist", pitch_deg: -20, move: "static", duration_s: [3, 5], direction: "افتح الدرج للآخر، وزقّه زقة خفيفة وسيبه يقفل لوحده." }),
+      p({ id: "H06", title: "الخامة والتقفيل من قريب", framing: "detail", lens: "2", height: "chest", pitch_deg: -5, move: "slide", duration_s: [3, 5], direction: "نور طبيعي، ومن غير فلتر يغيّر اللون. الفوكس على الحرف." }),
+      p({ id: "H07", title: "التخزين من جوه", framing: "medium", lens: "1", height: "chest", pitch_deg: 0, move: "tilt_down", duration_s: [4, 6], direction: "افتح الوحدة الطويلة كلها، وابدأ من فوق وانزل بالراحة." }),
+      p({ id: "H08", title: "الإضاءة وهي بتنوّر", framing: "medium", lens: "1", height: "chest", pitch_deg: 5, move: "static", duration_s: [3, 5], direction: "طفّي نور الأوضة، وبعدها شغّل إضاءة الوحدات وانت بتصوّر." }),
+      p({ id: "H09", title: "الأجهزة في مكانها", framing: "medium", lens: "1", height: "chest", pitch_deg: -10, move: "slide", duration_s: [4, 6], direction: "الحوض والبوتاجاز والشفاط والفرن، كل واحد في مكانه ومتركّب." }),
+      p({ id: "H10", title: "العميل بيفتح أول درج", framing: "medium", lens: "1", height: "chest", pitch_deg: -10, move: "static", duration_s: [3, 6], direction: "إيد العميل بس، أو وشه لو وافق إنه يظهر." }),
+      p({ id: "H11", title: "كلمة العميل", purpose: "رأي حقيقي بكلامه هو", framing: "medium", lens: "1", height: "eye", pitch_deg: 0, move: "static", duration_s: [8, 40], direction: "لو وافق يظهر بس. اسأله سؤال واحد: «إيه أكتر حاجة عجبتك؟» وسيبه يتكلم من غير تلقين." }),
+      p({ id: "H12", title: "لقطة الختام", framing: "wide", lens: "0.6", height: "chest", pitch_deg: 0, move: "pull_out", duration_s: [4, 6], direction: "ارجع لورا بالراحة لحد ما المكان كله يبان." }),
+    ],
+  }
+}

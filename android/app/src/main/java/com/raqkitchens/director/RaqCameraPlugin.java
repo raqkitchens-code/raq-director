@@ -124,8 +124,12 @@ public class RaqCameraPlugin extends Plugin {
     private TextToSpeech tts;
     private boolean ttsArabic = false;
 
+    /** A shoot pack link (https://raq-director.vercel.app/p#...) the app was opened with, until the web layer takes it. */
+    private String pendingLink = null;
+
     @Override
     public void load() {
+        pendingLink = packLink(getActivity().getIntent());
         tts = new TextToSpeech(getContext(), status -> {
             if (status != TextToSpeech.SUCCESS) return;
             int r = tts.setLanguage(new Locale("ar", "EG"));
@@ -134,6 +138,34 @@ public class RaqCameraPlugin extends Plugin {
             }
             ttsArabic = r != TextToSpeech.LANG_MISSING_DATA && r != TextToSpeech.LANG_NOT_SUPPORTED;
         });
+    }
+
+    // ---------- Pack links ----------
+
+    private static String packLink(Intent intent) {
+        if (intent == null || !Intent.ACTION_VIEW.equals(intent.getAction())) return null;
+        Uri data = intent.getData();
+        if (data == null || !"https".equals(data.getScheme()) || !"raq-director.vercel.app".equals(data.getHost())) return null;
+        return data.toString();
+    }
+
+    @Override
+    protected void handleOnNewIntent(Intent intent) {
+        super.handleOnNewIntent(intent);
+        String link = packLink(intent);
+        if (link == null) return;
+        JSObject r = new JSObject();
+        r.put("url", link);
+        if (hasListeners("link")) notifyListeners("link", r);
+        else pendingLink = link;
+    }
+
+    @PluginMethod
+    public void takeLink(PluginCall call) {
+        JSObject r = new JSObject();
+        if (pendingLink != null) r.put("url", pendingLink);
+        pendingLink = null;
+        call.resolve(r);
     }
 
     @Override

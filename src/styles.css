@@ -1036,3 +1036,9 @@ html.cam-through .viewport {
   color: var(--c900);
   font-weight: 700;
 }
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}

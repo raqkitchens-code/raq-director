@@ -12,7 +12,8 @@ import { db, persistStorage } from "./lib/db"
 import { LIBRARY_PACK } from "./lib/library"
 import { unlockAudio } from "./lib/feedback"
 import { RELOCK_MS } from "./lib/lock"
-import { isNative } from "./lib/native"
+import { takeLaunchLink } from "./lib/link"
+import { RaqCamera, isNative } from "./lib/native"
 import type { ShootPack, Take } from "./lib/types"
 
 type View =
@@ -20,7 +21,7 @@ type View =
   | { name: "pack"; id: string }
   | { name: "shoot"; id: string; index: number }
   | { name: "new" }
-  | { name: "import" }
+  | { name: "import"; link?: string }
   | { name: "takes" }
   | { name: "lens"; back: View }
 
@@ -30,6 +31,32 @@ export function App() {
   const [packs, setPacks] = useState<ShootPack[]>([LIBRARY_PACK])
   const [takes, setTakes] = useState<Take[]>([])
   const hiddenAt = useRef(0)
+  // A pack link waits here until the PIN is entered.
+  const [incoming, setIncoming] = useState<string | null>(() => takeLaunchLink())
+
+  // Links that arrive while the app is open: a new link in the browser tab, or the Android app opened from a link.
+  useEffect(() => {
+    const onHash = () => {
+      const l = takeLaunchLink()
+      if (l) setIncoming(l)
+    }
+    window.addEventListener("hashchange", onHash)
+    if (!isNative()) return () => window.removeEventListener("hashchange", onHash)
+    RaqCamera.takeLink()
+      .then((r) => r.url && setIncoming(r.url))
+      .catch(() => {})
+    const sub = RaqCamera.addListener("link", (r) => r.url && setIncoming(r.url))
+    return () => {
+      window.removeEventListener("hashchange", onHash)
+      sub.then((h) => h.remove()).catch(() => {})
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!unlocked || !incoming) return
+    setView({ name: "import", link: incoming })
+    setIncoming(null)
+  }, [unlocked, incoming])
 
   // Lock again after the app sat in the background.
   useEffect(() => {
@@ -56,12 +83,15 @@ export function App() {
     await db.savePack(p)
   }, [])
 
-  if (!unlocked) return <Lock
+  if (!unlocked)
+    return (
+      <Lock
         onUnlock={() => {
           unlockAudio()
           setUnlocked(true)
         }}
       />
+    )
 
   const pack = "id" in view ? packs.find((p) => p.id === view.id) : undefined
   const home = () => setView({ name: "home" })
@@ -110,6 +140,8 @@ export function App() {
     case "import":
       return (
         <Import
+          key={view.link ?? "paste"}
+          link={view.link}
           onBack={home}
           onSave={async (p) => {
             await savePack(p)
@@ -118,7 +150,9 @@ export function App() {
         />
       )
     case "takes":
-      return <Takes packs={packs} takes={takes} onBack={home} onDeleted={(id) => setTakes((ts) => ts.filter((t) => t.id !== id))} />
+      return (
+        <Takes packs={packs} takes={takes} onBack={home} onDeleted={(id) => setTakes((ts) => ts.filter((t) => t.id !== id))} />
+      )
     case "lens":
       return isNative() ? <NativeLenses onBack={() => setView(view.back)} /> : <LensSetup onBack={() => setView(view.back)} />
     default:

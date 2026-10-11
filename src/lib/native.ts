@@ -62,8 +62,11 @@ interface RaqCameraPlugin {
   speak(o: { text: string }): Promise<{ spoken: boolean }>
   stopSpeaking(): Promise<void>
   vibrate(o: { pattern: number[] }): Promise<void>
+  /** The pack link the app was opened with, once (see docs/PACK_FORMAT.md). */
+  takeLink(): Promise<{ url?: string }>
   addListener(event: "frame", cb: (f: { w: number; h: number; luma: string }) => void): Promise<PluginListenerHandle>
   addListener(event: "lens", cb: (s: CamState) => void): Promise<PluginListenerHandle>
+  addListener(event: "link", cb: (r: { url?: string }) => void): Promise<PluginListenerHandle>
 }
 
 export const RaqCamera = registerPlugin<RaqCameraPlugin>("RaqCamera")

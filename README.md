@@ -3,12 +3,13 @@
 أداة تصوير مستقلة على الموبايل. العقل (مشروع «عقل راق») بيبعتلها خطة لقطات، وهي بتفتح الكاميرا، وتوجّه الكادر لحد ما ينوّر أخضر، وتشتغل ملقّن، وتقيّم كل لقطة، وتحفظها على الموبايل.
 
 A standalone phone web app (installable, full screen). No server, no account, no outside connections:
-plans come in by paste or file, footage stays on the phone until Khaled exports it.
+plans come in by link, paste or file, footage stays on the phone until Khaled exports it.
 
 ## Flow
 1. **هنصور إيه النهارده؟** — the home screen lists the next shots with no accepted take (from the active plan, else the RAQ shot library).
 2. **طلب جديد** — project / script / general shots: write rules or a prompt, copy the request to the brain, paste its answer back
-   (format: [`docs/PACK_FORMAT.md`](docs/PACK_FORMAT.md)). A project-tour template and script splitting work without the brain.
+   (format: [`docs/PACK_FORMAT.md`](docs/PACK_FORMAT.md)). Survey («معاينة»), handover («تسليم») and project-tour templates and script splitting work without the brain.
+   A pack link (`/p#1.…`, see the format doc) opens straight into «احفظ الخطة».
 3. **المخرج** — camera with grid, horizon level, pitch target, reference ghost + edge match, light and focus checks.
    The frame turns green when everything measurable is right. Teleprompter, tap to focus, torch, zoom, per-lens camera memory.
 4. **التقييم** — duration, level, pitch, steadiness, light, sharpness, reference match → «مقبولة» or «محتاجة تتعاد».

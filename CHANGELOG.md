@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.0 — 2026-10-11
+- Shoot pack by link: the whole pack rides in the link after "#", so opening it stays on the phone
+  (`connect-src 'self'` unchanged). Tap the link → PIN → the pack is shown → «احفظ الخطة».
+  A link pasted into «استلم خطة» works too, and the Android app opens `raq-director.vercel.app/p` links itself.
+- «ابعت الخطة برابط» on every pack page; `scripts/pack-link.mjs` makes links from a pack file.
+- A client project that arrives by link always waits for consent on the phone (DEC-51).
+- Built-in «معاينة» (12 shots: walls, openings, water, drain, gas, power, ceiling, floor, access)
+  and «تسليم» (12 shots, opens from the same spot as the survey for before/after) templates.
+
 ## 0.3.0 — 2026-10-04
 - Android app (Capacitor) around the same screens, built by CI as an installable APK.
 - Native camera (CameraX): reaches the ultra-wide through zoom below 1× on the main camera,

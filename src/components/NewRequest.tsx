@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { arNum } from "../lib/labels"
-import { projectTourPack, scriptPack } from "../lib/library"
+import { handoverPack, projectTourPack, scriptPack, surveyPack } from "../lib/library"
 import { PROJECT_CODE_RE, buildBrainPrompt } from "../lib/pack"
 import type { PackKind, ShootPack } from "../lib/types"
 
@@ -14,6 +14,12 @@ const KINDS: { kind: PackKind; label: string }[] = [
   { kind: "project", label: "مشروع" },
   { kind: "script", label: "فيديو بسكريبت" },
   { kind: "library", label: "لقطات عامة" },
+]
+
+const TEMPLATES = [
+  { label: "معاينة", make: surveyPack },
+  { label: "تسليم", make: handoverPack },
+  { label: "جولة مشروع", make: projectTourPack },
 ]
 
 export function NewRequest({ onBack, onCreate, onImport }: Props) {
@@ -121,13 +127,22 @@ export function NewRequest({ onBack, onCreate, onImport }: Props) {
       <section className="card">
         <h2>أو ابدأ دلوقتي من غير العقل</h2>
         {kind === "project" && (
-          <button
-            className="btn wide"
-            disabled={!codeOk}
-            onClick={() => onCreate(projectTourPack(code.trim(), consent, notes.trim()))}
-          >
-            قالب جولة مشروع (٨ لقطات)
-          </button>
+          <div className="stack">
+            {TEMPLATES.map((t) => {
+              const sample = t.make("RAQ-2026-000000", false, "")
+              return (
+                <button
+                  key={t.label}
+                  className="btn wide"
+                  disabled={!codeOk}
+                  onClick={() => onCreate(t.make(code.trim(), consent, notes.trim()))}
+                >
+                  قالب {t.label} ({arNum(sample.shots.length)} لقطة)
+                </button>
+              )
+            })}
+            {!codeOk && <small className="muted">اكتب كود المشروع الأول.</small>}
+          </div>
         )}
         {kind === "script" && (
           <button className="btn wide" disabled={!script.trim()} onClick={() => onCreate(scriptPack(title.trim(), script))}>

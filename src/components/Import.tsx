@@ -1,22 +1,36 @@
-import { useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { arNum } from "../lib/labels"
-import { parsePack } from "../lib/pack"
+import { hasPackLink, readPackText } from "../lib/link"
+import type { ParseResult } from "../lib/pack"
 import type { ShootPack } from "../lib/types"
 
 interface Props {
+  /** A pack link the app was opened with. */
+  link?: string
   onBack: () => void
   onSave: (p: ShootPack) => void
 }
 
-export function Import({ onBack, onSave }: Props) {
+export function Import({ link, onBack, onSave }: Props) {
   const [text, setText] = useState("")
-  const [result, setResult] = useState<ReturnType<typeof parsePack> | null>(null)
+  const [result, setResult] = useState<ParseResult | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
+  const seq = useRef(0)
+
+  const read = async (t: string) => {
+    const n = ++seq.current
+    const r = t.trim() ? await readPackText(t) : null
+    if (n === seq.current) setResult(r)
+  }
 
   const check = (t: string) => {
     setText(t)
-    setResult(t.trim() ? parsePack(t) : null)
+    void read(t)
   }
+
+  useEffect(() => {
+    if (link) void read(link)
+  }, [link])
 
   const paste = async () => {
     try {
@@ -32,30 +46,38 @@ export function Import({ onBack, onSave }: Props) {
         <button className="ghost-btn" onClick={onBack} aria-label="رجوع">
           →
         </button>
-        <h1 className="h-sm grow">استلم خطة من العقل</h1>
+        <h1 className="h-sm grow">{link ? "خطة وصلت برابط" : "استلم خطة من العقل"}</h1>
       </header>
 
-      <section className="card form">
-        <div className="row">
-          <button className="btn" onClick={paste}>
-            الصق
-          </button>
-          <button className="btn" onClick={() => fileRef.current?.click()}>
-            افتح ملف
-          </button>
-        </div>
-        <input
-          ref={fileRef}
-          type="file"
-          accept=".json,application/json,text/plain"
-          hidden
-          onChange={async (e) => {
-            const f = e.target.files?.[0]
-            if (f) check(await f.text())
-          }}
-        />
-        <textarea rows={10} dir="auto" placeholder="الصق رد العقل هنا" value={text} onChange={(e) => check(e.target.value)} />
-      </section>
+      {!link && (
+        <section className="card form">
+          <div className="row">
+            <button className="btn" onClick={paste}>
+              الصق
+            </button>
+            <button className="btn" onClick={() => fileRef.current?.click()}>
+              افتح ملف
+            </button>
+          </div>
+          <input
+            ref={fileRef}
+            type="file"
+            accept=".json,application/json,text/plain"
+            hidden
+            onChange={async (e) => {
+              const f = e.target.files?.[0]
+              if (f) check(await f.text())
+            }}
+          />
+          <textarea
+            rows={hasPackLink(text) ? 3 : 10}
+            dir="auto"
+            placeholder="الصق رد العقل أو رابط الخطة هنا"
+            value={text}
+            onChange={(e) => check(e.target.value)}
+          />
+        </section>
+      )}
 
       {result && (
         <section className="card">
