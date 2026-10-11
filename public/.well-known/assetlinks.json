@@ -1,0 +1,10 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.raqkitchens.director",
+      "sha256_cert_fingerprints": ["E6:23:34:DF:3D:9D:5F:AC:E1:9C:11:FB:2F:A2:32:29:5E:CE:1F:A2:73:6A:78:2E:3B:2E:F5:6E:73:7C:8D:BE"]
+    }
+  }
+]

@@ -3,7 +3,7 @@
 الملف ده للعقل (مشروع «عقل راق» على كلود): إزاي يكتب خطة تصوير مخرج راق يقدر يقراها.
 
 The brain answers with **one JSON object inside a ```json code fence**. Khaled pastes the whole answer
-into «استلم خطة من العقل». Anything outside the fence is ignored.
+into «استلم خطة من العقل», or taps a pack link (below). Anything outside the fence is ignored.
 
 ```json
 {
@@ -50,6 +50,21 @@ into «استلم خطة من العقل». Anything outside the fence is ignore
 | `prompter` | text | shown on the teleprompter; empty = silent shot |
 | `pillar` | the 6 `content_pillar` values in RAQ OS | optional |
 | `reference_image` | `data:image/jpeg;base64,…` or `null` | **links are rejected**; Khaled can also attach a reference photo per shot inside the app |
+
+## Sending a pack as a link
+A pack can travel as one link that Khaled taps on WhatsApp. The pack sits after the `#`, which the
+browser never sends to any server:
+
+```
+https://raq-director.vercel.app/p#1.<base64url of deflate-raw(pack JSON)>
+https://raq-director.vercel.app/p#0.<base64url of the pack JSON as UTF-8>
+```
+
+- Claude with a shell: `node scripts/pack-link.mjs pack.json` prints the link.
+- The brain on claude.ai: use the analysis tool (`CompressionStream("deflate-raw")`, then base64url) or the `0.` form.
+  Never type base64 by hand; a wrong character breaks the link. Send the json fence too, as a fallback.
+- Over about 30,000 characters some chat apps cut the link; leave `reference_image` out.
+- A `project` pack that arrives by link is always locked until Khaled confirms consent on the phone.
 
 ## Rules the brain applies before writing a pack
 - Brand rules: Dropbox `/RAQ/02_Brand/BR_brand-rules-text_v01_2026-10-03.md` (9:16, best shot first, full wall then details, real RAQ work only).

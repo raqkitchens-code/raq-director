@@ -66,11 +66,11 @@ export function Home({ packs, takes, onOpenPack, onShoot, onNew, onImport, onTak
       <div className="grid-2">
         <button className="tile" onClick={onImport}>
           <b>استلم خطة من العقل</b>
-          <span className="muted">الصق رد عقل راق أو افتح ملف الخطة</span>
+          <span className="muted">الصق رد العقل أو رابط الخطة، أو افتح ملف</span>
         </button>
         <button className="tile" onClick={onNew}>
           <b>طلب جديد</b>
-          <span className="muted">مشروع، أو فيديو بسكريبت، أو لقطات عامة</span>
+          <span className="muted">قالب معاينة أو تسليم، أو مشروع، أو فيديو بسكريبت</span>
         </button>
         <button className="tile" onClick={() => onOpenPack(LIBRARY_PACK.id)}>
           <b>مكتبة لقطات راق</b>
