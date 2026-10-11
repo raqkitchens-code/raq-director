@@ -1,0 +1,52 @@
+{
+  "viewport": {
+    "w": 320,
+    "h": 616,
+    "dpr": 1
+  },
+  "lenses": {
+    "cameras": [
+      {
+        "id": "0",
+        "facing": "back",
+        "focal": 3.299999952316284,
+        "fov": 52,
+        "zoomMin": 1,
+        "zoomMax": 10,
+        "physical": []
+      },
+      {
+        "id": "1",
+        "facing": "front",
+        "focal": 4.380000114440918,
+        "fov": 66,
+        "zoomMin": 1,
+        "zoomMax": 12.931958198547363,
+        "physical": [
+          {
+            "id": "3",
+            "fov": 66
+          },
+          {
+            "id": "4",
+            "fov": 43
+          }
+        ]
+      }
+    ]
+  },
+  "camThrough": true,
+  "pills": 4,
+  "errorBanner": [],
+  "wideBanner": [
+    "الموبايل مش مدّي التطبيق العدسة الواسعة. صوّر بالعادية وارجع لورا خطوتين، وابعتلي صورة من صفحة ظبط العدسات."
+  ],
+  "recording": true,
+  "verdict": "اللقطة مقبولة",
+  "savedNote": 1,
+  "reviewBanner": [],
+  "gallery": [
+    "Row: 0 _display_name=MKT_lib-raq-01-l01-take01_v01_2026-10-11-mv36xt30.mp4, relative_path=Movies/RAQ/"
+  ],
+  "errors": []
+}
